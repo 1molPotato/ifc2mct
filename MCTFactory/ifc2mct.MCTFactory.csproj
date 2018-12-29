@@ -53,6 +53,7 @@
     <Compile Include="Model\MCTSteelBoxSection.cs" />
     <Compile Include="Model\MCTStiffeningLayout.cs" />
     <Compile Include="Model\MCTStiffner.cs" />
+    <Compile Include="Model\MCTUnit.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

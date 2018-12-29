@@ -45,8 +45,7 @@ namespace ifc2mct.Tests
 
             var dimensions = new List<double>() { 1.75, 6.4, 0.05, 5.7, 2.3, 0.016, 0.016, 0.014 };
             var section = new MCTSteelBoxSection(3, "no_stiff", dimensions);
-            var stiff = new MCTStiffener("U-Stiff", MCTStiffenerType.U_STIFF,
-                new List<double>() { 0.28, 0.3, 0.17, 0.008, 0.05 });
+            var stiff = new MCTStiffener("U-Stiff", new List<double>() { 0.28, 0.3, 0.17, 0.008, 0.05 });
             section.Stiffen(stiff);
             var layout = new MCTStiffeningLayout(MCTStiffenedPlateType.TOP_FLANGE, MCTStiffenedLocation.CENTER);
             var stiffeners = new List<(double dist, string name)>()
@@ -56,7 +55,7 @@ namespace ifc2mct.Tests
             layout.Stiffen(stiffeners);
             section.Stiffen(layout);
 
-            var stiff2 = new MCTStiffener("P-Stiff", MCTStiffenerType.PLATE_STIFF, new List<double>() { 0.18, 0.008 });
+            var stiff2 = new MCTStiffener("P-Stiff", new List<double>() { 0.18, 0.008 });
             section.Stiffen(stiff2);
             var layout2 = new MCTStiffeningLayout(MCTStiffenedPlateType.LEFT_WEB);
             layout2.Stiffen(1.2, stiff2.Name);

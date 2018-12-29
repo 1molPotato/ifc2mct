@@ -7,8 +7,10 @@ using Xbim.Ifc;
 using Xbim.Ifc4.GeometricModelResource;
 using Xbim.Ifc4.GeometryResource;
 using Xbim.Ifc4.Interfaces;
+using Xbim.Ifc4.Kernel;
 using Xbim.Ifc4.MeasureResource;
 using Xbim.Ifc4.ProfileResource;
+using Xbim.Ifc4.PropertyResource;
 
 namespace ifc2mct.BridgeFactory
 {
@@ -149,6 +151,21 @@ namespace ifc2mct.BridgeFactory
                 d.OffsetLongitudinal = 0;
                 d.AlongHorizontal = true;
             });
+        }
+
+        public static IfcPropertySet MakePropertySet(IfcStore m, string name, Dictionary<string, double> properties)
+        {
+            var propertySet = m.Instances.New<IfcPropertySet>(ps => ps.Name = name);
+            foreach (var property in properties)
+            {
+                var prop = m.Instances.New<IfcPropertySingleValue>(p =>
+                {
+                    p.Name = property.Key;
+                    p.NominalValue = new IfcLengthMeasure(property.Value);
+                });
+                propertySet.HasProperties.Add(prop);
+            }
+            return propertySet;
         }
     }
 }

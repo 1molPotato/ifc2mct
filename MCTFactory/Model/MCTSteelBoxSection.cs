@@ -23,7 +23,7 @@ namespace ifc2mct.MCTFactory.Model
             : base(iSEC, name)
         {
             SHAPE = "SOD-B";
-            SectDimensions = dimensions;
+            SectDimensions = new List<double>(dimensions);
             Stiffeners = new HashSet<MCTStiffener>();
             StiffeningLayouts = new HashSet<MCTStiffeningLayout>();
             SetSectDimensions();

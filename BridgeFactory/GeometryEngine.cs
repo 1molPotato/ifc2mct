@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Xbim.Common;
 using Xbim.Common.Geometry;
 using Xbim.Ifc4.GeometryResource;
 using Xbim.Ifc4.Interfaces;
@@ -13,6 +14,7 @@ namespace ifc2mct.BridgeFactory
     public class GeometryEngine
     {
         private static readonly double Tolerance = 1e-9;
+        public static bool isSIUnits = true;
 
         #region BasicGeometricUtilities
         public static XbimVector3D ToXbimVector3D(IIfcDirection d)
@@ -30,7 +32,7 @@ namespace ifc2mct.BridgeFactory
             const double Degree2Radian = Math.PI / 180;
 
             if (angle > 360 + Tolerance || angle < -360 - Tolerance) throw new ArgumentOutOfRangeException("angle");
-            double angleRad = angle * Degree2Radian;
+            double angleRad = isSIUnits ? angle : angle * Degree2Radian;
             return new XbimVector3D(Math.Cos(angleRad), Math.Sin(angleRad), 0);
         }
 
@@ -127,6 +129,22 @@ namespace ifc2mct.BridgeFactory
             var lateral = isCCW ? center2end.Negated() : center2end;
             return (center + radius * center2end, lateral);
         }
+
+        public static (XbimPoint3D pt, XbimVector3D vec) GetPointByDistAlong(IItemSet<IIfcAlignment2DHorizontalSegment> horSegs, double dist)
+        {
+            int i = 0;
+            IIfcCurveSegment2D cur = null;
+            for (; i < horSegs.Count; i++)
+            {
+                cur = horSegs[i].CurveGeometry;
+                if (dist > cur.SegmentLength + Tolerance)
+                    dist -= cur.SegmentLength;
+                else break;
+            }
+            if (cur == null) throw new ArgumentNullException("horSegs");
+            return GetPointOnCurve(cur, dist);
+        }
+
         #endregion
 
         #region GetElevation
@@ -144,6 +162,21 @@ namespace ifc2mct.BridgeFactory
             var dir = new XbimVector3D(Math.Cos(gradient), 0, Math.Sin(gradient));
             return (start + dir * dist).Z;
             throw new NotImplementedException();
+        }
+
+        public static double GetElevByDistAlong(IItemSet<IIfcAlignment2DVerticalSegment> verSegs, double dist)
+        {
+            int i = 0;
+            IIfcAlignment2DVerticalSegment seg = null;
+            for (; i < verSegs.Count; i++)
+            {
+                seg = verSegs[i];
+                if (i == 0) dist -= seg.StartDistAlong;
+                if (dist > seg.HorizontalLength + Tolerance)
+                    dist -= seg.HorizontalLength;
+                else break;
+            }
+            return GetElevOnCurve(seg, dist);
         }
         #endregion
 

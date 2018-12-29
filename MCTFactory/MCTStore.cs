@@ -9,6 +9,7 @@ namespace ifc2mct.MCTFactory
 {
     public class MCTStore
     {
+        public MCTUnit Unit { get; private set; }
         public HashSet<MCTNode> Nodes { get; private set; }
         public HashSet<MCTElement> Elements { get; private set; }
         public Dictionary<int, MCTMaterial> Materials { get; private set; }
@@ -23,7 +24,12 @@ namespace ifc2mct.MCTFactory
             Nodes = new HashSet<MCTNode>();
             Elements = new HashSet<MCTElement>();
             Materials = new Dictionary<int, MCTMaterial>();
-            Sections = new Dictionary<int, MCTSection>();
+            Sections = new Dictionary<int, MCTSection>();           
+        }
+
+        public void SetUnitSystem(string force, string length, string heat, string temper)
+        {
+            Unit = new MCTUnit(force, length, heat, temper);
         }
 
         public void AddObject(MCTRoot o)
@@ -38,6 +44,7 @@ namespace ifc2mct.MCTFactory
         {
             using (var sw = new StreamWriter(path, false, Encoding.GetEncoding("GB2312")))
             {
+                sw.WriteLine(Unit);
                 sw.WriteLine("*NODE");
                 foreach (var node in Nodes)
                     sw.WriteLine(node);

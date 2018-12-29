@@ -275,5 +275,36 @@ namespace ifc2mct.Tests
                     Assert.AreEqual(expected[i], actual[i]);
             }
         }
+
+        [TestMethod]
+        public void GetPointByDistAlongTest()
+        {
+            string file = @"D:\master_thesis\ifc_files\Bridge\us.ifc";
+            using (var model = IfcStore.Open(file))
+            {
+                GeometryEngine.isSIUnits = false;
+                var start = new XbimPoint3D(0, 0, 0);
+                var dir = GeometryEngine.ToVector3D(13.35833333);
+                double r = 9279;
+                double dist = 2965.68;
+                var v1 = GeometryEngine.ToVector3D(-4.95408690777971);
+                var zAx = new XbimVector3D(0, 0, 1);
+                var v2 = zAx.CrossProduct(v1);
+                var arcEnd = new XbimPoint3D(2945.13464253837, 216.386895560319, 0);
+                var expected = (arcEnd, v2);
+                var actual = GeometryEngine.GetPointOnCurve(start, dir, r, false, dist);
+                Assert.AreEqual(expected, actual);
+
+                var hor = (IIfcAlignment2DHorizontal)model.Instances[102];
+                var horsegs = hor.Segments;
+                actual = GeometryEngine.GetPointByDistAlong(horsegs, dist);
+                Assert.AreEqual(expected, actual);
+
+                dist = 3500;
+                expected = (arcEnd + (dist - 2965.68) * v1, v2);
+                actual = GeometryEngine.GetPointByDistAlong(horsegs, dist);
+                Assert.AreEqual(expected, actual);
+            }
+        }
     }
 }
