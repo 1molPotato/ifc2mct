@@ -1,12 +1,10 @@
-﻿using System;
-using System.Text;
-using System.Collections.Generic;
+﻿using ifc2mct.BridgeFactory;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
+using System.Collections.Generic;
 using Xbim.Common.Geometry;
 using Xbim.Ifc;
-using Xbim.Ifc4.GeometricConstraintResource;
 using Xbim.Ifc4.Interfaces;
-using ifc2mct.BridgeFactory;
 
 namespace ifc2mct.Tests
 {
@@ -66,14 +64,112 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void BuildModelTest()
         {
-            const string path = @"D:\master_thesis\ifc_files\BuildBridgeModel\test.ifc";
+            const string path = "../../TestFiles/test.ifc";
             var builder = new BridgeBuilder(path);
             builder.Run();
+        }
+
+        [TestMethod]
+        public void BuildBridgeTest()
+        {
+            const string PATH = "../../TestFiles/bridgeTest.ifc";
+            // bridge data
+            // overall
+            const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
+            var secDimensions = new List<double>() { 1750, 6400, 50, 5550, 1968 };
+            var thicknessLists = new List<List<(double, double)>>()
+            {
+                new List<(double, double)>() { (28000, 16), (44000, 20), (72262, 16) }, 
+                new List<(double, double)>() { (6000, 16), (28000, 14), (33000, 16), (39000, 20), (44000, 16), (66302, 14), (72262, 16) },
+                new List<(double, double)>() { (28000, 16), (33000, 20), (39000, 25), (44000, 20), (72262, 16)}
+            };
+            // stiffeners
+            var stiffenerTypeTable = new Dictionary<int, List<double>>()
+            {
+                { 1, new List<double>(){ 160, 14 } }, // flat stiffener
+                { 2, new List<double>(){ 190, 16 } }, // flat stiffener
+                { 3, new List<double>(){ 240, 20 } }, // flat stiffener
+                { 4, new List<double>(){ 400, 16 } }, // flat stiffener
+                { 5, new List<double>(){ 280, 300, 170, 8, 40 } }, // U-shape stiffener
+                { 6, new List<double>(){ 400, 16 } } // edge plate
+            };
+            var stiffenerLayoutTable = new Dictionary<int, List<(int num, double gap)>>()
+            {
+                { 1, new List<(int, double)>() { (2, 250), (1, 8900), (1, 250) } },
+                { 2, new List<(int, double)>() { (1, 870), (1, 530), (1, 850), (9, 600), (1, 850), (1, 530) } },
+                { 3, new List<(int, double)>() { (/*1, 450), (2*/3, 400), (7, 450), (2, 400) } },
+                { 4, new List<(int, double)>() { (1, 400), (1, 1212) } },
+                { 5, new List<(int, double)>() { (1, 8), (1, 9884)} }
+            };
+            var stiffenerLists = new List<(int parentId, List<(double distanceAlong, int typeId, int layoutId)> stiffList)>()
+            {
+                { (0, new List<(double, int, int)>() { (72262, 2, 1) }) }, // stiffeners on top flange
+                { (0, new List<(double, int, int)>() { (72262, 5, 2) }) }, // stiffeners on top flange
+                { (1, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on left web
+                { (2, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on right web
+                { (3, new List<(double, int, int)>() { (23000, 2, 3), (44000, 3, 3), (72262, 2, 3) }) }, // stiffeners on bottom flange
+                { (0, new List<(double, int, int)>() { (72262, 6, 5) }) } // edge plate on top flange
+            };
+            // bearings
+            // TODO
+            var bearingTypeTable = new Dictionary<int, (bool fixedLateral, bool fixedLongitudinal, bool fixedVertical)>()
+            {
+                {1, (true, true, false) }, // dual-fixed (non-guided)
+                {2, (false, true, true) }, // longitudinal-fixed (tranversely guided)
+                {3, (true, false, true) }, // lateral-fixed (longitudinally guided), pull-resistant
+                {4, (false, false, true) } // non-fixed (dual-guided), pull-resistant
+            };
+            var bearingList = new List<(double distanceAlong, double offsetLateral, int bearingTypeId)>()
+            {
+                (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71752, 1400, 3), (71752, -1900, 4)
+            };
+
+            // cross frames
+            // TODO
+            var diaphragmTypeTable = new Dictionary<int, double>()
+            {
+                {1, 20}, {2, 12}, {3, 20}, {4, 25}
+            };
+            var diaphragmList = new List<(int typeId, int num, double gap)>()
+            {
+                (1, 1, 550), (2, 1, 1410), (2, 10, 3000), (3, 1, 3000), (4, 1, 1000), (3, 1, 1000), (2, 10, 3000), (2, 1, 1500), (2, 1, 1606), (1, 1, 1606)
+            };
+            
+            // build bridge components
+            var builder = new BridgeBuilder(PATH);
+            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+            builder.SetGaps(STARTGAP, ENDGAP);
+            builder.SetOverallSection(secDimensions);
+            builder.SetPlateThicknesses(thicknessLists);
+            foreach (var stiffenerType in stiffenerTypeTable)
+                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+            foreach (var stiffenerLayout in stiffenerLayoutTable)
+                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+            foreach (var (parentId, stiffList) in stiffenerLists)
+                builder.AddStiffeners(parentId, stiffList);
+            foreach (var bearingType in bearingTypeTable)
+                builder.AddBearingType(bearingType.Key, bearingType.Value);
+            foreach (var bearing in bearingList)
+                builder.AddBearing(bearing);
+            foreach (var diaphragmType in diaphragmTypeTable)
+                builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
+            builder.AddDiaphragm(diaphragmList);
+            builder.Run2();
+        }
+
+        [TestMethod]
+        public void BuildSectionedSolidTest()
+        {
+            const string PATH = "../../TestFiles/testSectionedSolid.ifc";
+            var builder = new BridgeBuilder(PATH);
+            builder.Run3();
         }
     }
     [TestClass]
     public class GeometryEngineTest
     {
+        private readonly string _testFilePath1 = "../../TestFiles/SteelBridgeNew.ifc";
+        private readonly string _testFilePath2 = "../../TestFiles/us.ifc";
         [TestMethod]
         public void GetArcEndByDistAlongTest()
         {
@@ -144,8 +240,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void GetMatrixFromAxisPlacement3DTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\SteelBridgeNew.ifc";
-            using (var model = IfcStore.Open(file))
+            using (var model = IfcStore.Open(_testFilePath1))
             {
                 var ax = (IIfcAxis2Placement3D)model.Instances[3795];
                 var actual = GeometryEngine.ToMatrix3D(ax);
@@ -204,8 +299,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void GetMatrixFromLocalPlacementTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\SteelBridgeNew.ifc";
-            using (var model = IfcStore.Open(file))
+            using (var model = IfcStore.Open(_testFilePath1))
             {
                 // PlacementRelTo is null.
                 var lp = (IIfcLocalPlacement)model.Instances[3791];
@@ -246,8 +340,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void TransformationMatrixTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\SteelBridgeNew.ifc";
-            using (var model = IfcStore.Open(file))
+            using (var model = IfcStore.Open(_testFilePath1))
             {
                 var lp = (IIfcLocalPlacement)model.Instances[42015];
                 var ax = (IIfcAxis2Placement3D)model.Instances[42093];
@@ -262,8 +355,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void ToCoordListTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\us.ifc";
-            using (var model = IfcStore.Open(file))
+            using (var model = IfcStore.Open(_testFilePath2))
             {
                 var indPoly = (IIfcIndexedPolyCurve)model.Instances[836];
                 var expected = new List<double>() { -162.25, -9.52, -144, -11.52, 180, 14.4, 204, 14.88, 252, 13.92, 270.25, 15.92, 272.25, 13.92, 272.25, 4.67, 271.5, 3.92, 236, 2.4, 214, 2.4, 214, 5.9, 121, 0.380000000000001, 121, -3.12, 101, -3.12, 101, 0.380000000000001, 7, -8.74, 7, -12.24, -13, -12.24, -13, -8.74, -107, -17.86, -107, -21.36, -127, -21.36, -163.5, -21.52, -164.25, -20.77, -164.25, -11.52 };
@@ -279,8 +371,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void GetPointByDistAlongTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\us.ifc";
-            using (var model = IfcStore.Open(file))
+            using (var model = IfcStore.Open(_testFilePath2))
             {
                 GeometryEngine.isSIUnits = false;
                 var start = new XbimPoint3D(0, 0, 0);

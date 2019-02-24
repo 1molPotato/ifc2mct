@@ -206,7 +206,6 @@ namespace ifc2mct.Translator
         {
             _mctStore.WriteMCTFile(path);
         }
-
     }
 
     public class TranslatorUtils

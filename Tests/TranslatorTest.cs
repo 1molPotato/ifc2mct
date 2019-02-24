@@ -12,7 +12,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void ProcessProfileTest()
         {
-            string file = @"D:\master_thesis\ifc_files\Bridge\SteelBridgeNew.ifc";
+            string file = "../../TestFiles/SteelBridgeNew.ifc";
             using (var model = IfcStore.Open(file))
             {
                 var profile = (IIfcProfileDef)model.Instances[42089];
@@ -25,8 +25,8 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void TranslateSteelBoxGirderTest()
         {
-            string ifcfile = @"D:\master_thesis\ifc_files\BuildBridgeModel\test.ifc";
-            string mctfile = @"D:\master_thesis\midas_files\test.mct";
+            string ifcfile = "../../TestFiles/test.ifc";
+            string mctfile = "../../TestFiles/test.mct";
             using (var model = IfcStore.Open(ifcfile))
             {
                 var worker = new Worker(model);

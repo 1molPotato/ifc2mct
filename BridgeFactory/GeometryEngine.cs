@@ -103,7 +103,7 @@ namespace ifc2mct.BridgeFactory
         }
 
         /// <summary>
-        /// Get point on arc by given start poing, start direction, arc radius, 
+        /// Get point on arc by given start point, start direction, arc radius, 
         /// is counter-clockwise and distance along.
         /// </summary>
         /// <param name="start"></param>
@@ -178,6 +178,7 @@ namespace ifc2mct.BridgeFactory
             }
             return GetElevOnCurve(seg, dist);
         }
+
         #endregion
 
         #region ToCoordList

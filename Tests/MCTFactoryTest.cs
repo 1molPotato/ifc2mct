@@ -15,7 +15,7 @@ namespace ifc2mct.Tests
         public void WriteMCTFileTest()
         {
             var mctStore = new MCTStore();
-            string outfile = @"D:\master_thesis\midas_files\ifc2mct_test.mct";
+            string outfile = "../../TestFiles/empty_mct_test.mct";
             mctStore.WriteMCTFile(outfile);
             Assert.IsTrue(File.Exists(outfile));
         }
@@ -41,7 +41,7 @@ namespace ifc2mct.Tests
         public void MCTWriteBoxSectionTest()
         {
             var mctStore = new MCTStore();
-            string outfile = @"D:\master_thesis\midas_files\box_test.mct";
+            string outfile = "../../TestFiles/box_test.mct";
 
             var dimensions = new List<double>() { 1.75, 6.4, 0.05, 5.7, 2.3, 0.016, 0.016, 0.014 };
             var section = new MCTSteelBoxSection(3, "no_stiff", dimensions);
