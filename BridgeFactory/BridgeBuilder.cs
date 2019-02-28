@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Xbim.Common;
@@ -28,9 +29,12 @@ namespace ifc2mct.BridgeFactory
     public class BridgeBuilder
     {
         private readonly string _outputPath = "";
-        private readonly string _projectName = "xx大道立交SW1-SW5匝道";
+        //private readonly string _projectName = "xx大道立交SW1-SW5匝道";
         private readonly string _bridgeName = "SW3-SW5钢结构连续箱梁";
+        private readonly IfcStore _model;
 
+
+        private bool IsAlignmentStraight { get; set; }
         private IfcCurve BridgeAlignmentCurve { get; set; }
 
         /// <summary>
@@ -74,7 +78,7 @@ namespace ifc2mct.BridgeFactory
         /// each table contains a list of (distanceAlong, thickness) pairs which indicates
         /// the thickness of the plate between last distanceAlong (begin with 0) and this distanceAlong
         /// </summary>
-        private List<List<(double distanceAlong, double thickness)>> PlateThicknessLists { get; set; }
+        private Dictionary<int, List<(double distanceAlong, double thickness)>> PlateThicknessLists { get; set; }
 
         /// <summary>
         /// (parentId, [(distanceAlong, typeId, layoutId)]) pairs indicate
@@ -119,14 +123,23 @@ namespace ifc2mct.BridgeFactory
         private IfcDirection AxisY2D { get; set; }
         private IfcAxis2Placement2D WCS2D { get; set; }
 
-        public BridgeBuilder() : this("test.ifc")
+        // Constructors
+        public BridgeBuilder() : this("alignment.ifc", "test.ifc")
         {
             // empty
         }
 
-        public BridgeBuilder(string path)
+        public BridgeBuilder(string inputPath, string outputPath)
         {
-            _outputPath = path;
+            if (!File.Exists(inputPath))
+            {
+                var builder = new AlignmentBuilder(inputPath);
+                builder.Run();
+            }
+            _model = IfcStore.Open(inputPath);
+
+            _outputPath = outputPath;
+            PlateThicknessLists = new Dictionary<int, List<(double distanceAlong, double thickness)>>();
             StiffenerLists = new Dictionary<int, List<List<(double distanceAlong, int typeId, int layoutId)>>>();
             StiffenerTypeTable = new Dictionary<int, List<double>>();
             StiffenerLayoutTable = new Dictionary<int, List<(int num, double gap)>>();
@@ -136,7 +149,14 @@ namespace ifc2mct.BridgeFactory
             DiaphragmTypeTable = new Dictionary<int, double>();
         }
 
-        // Interfaces        
+        // Interfaces  
+        /// <summary>
+        /// Set bridge's start position, end position, vertical offset and lateral offset to the road alignment
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <param name="verOffset"></param>
+        /// <param name="latOffset"></param>
         public void SetBridgeAlignment(double start, double end, double verOffset, double latOffset)
         {
             BridgeStart = start;
@@ -145,12 +165,27 @@ namespace ifc2mct.BridgeFactory
             BridgeAlignmentLatOff = latOffset;
         }
 
-        public void SetGaps(double start, double end)
+        /// <summary>
+        /// Set the girder's start gap and end gap to the bridge's start position and end position respectively
+        /// </summary>
+        /// <param name="startGap"></param>
+        /// <param name="endGap"></param>
+        public void SetGaps(double startGap, double endGap)
         {
-            StartGap = start;
-            EndGap = end;
+            StartGap = startGap;
+            EndGap = endGap;
         }
 
+        /// <summary>
+        /// Set box-girder section dimensions = {B1, B2, B4, B5, H}, where
+        /// B1 is the external length of top flange
+        /// B2 is the internal length of top flange
+        /// B4 is the external length of bottom flange
+        /// B5 is the internal length of bottom flange
+        /// H is the height of the box
+        /// thickness of plates is not included
+        /// </summary>
+        /// <param name="dimensions"></param>
         public void SetOverallSection(List<double> dimensions)
         {
             if (dimensions.Count == 5)
@@ -159,20 +194,39 @@ namespace ifc2mct.BridgeFactory
                 throw new ArgumentException("The overall section dimensions should be {B1, B2, B4, B5, H}");
         }
 
-        public void SetPlateThicknesses(List<List<(double, double)>> thicknessLists)
+
+        public void SetThicknesses(List<List<(double, double)>> thicknessLists)
         {
             if (thicknessLists.Count == 3)
             {
-                PlateThicknessLists = new List<List<(double, double)>>
-                {
-                    thicknessLists[0],
-                    thicknessLists[1],
-                    thicknessLists[1],
-                    thicknessLists[2]
-                };
+                SetThicknesses(0, thicknessLists[0]);
+                SetThicknesses(1, thicknessLists[1]);
+                SetThicknesses(2, thicknessLists[1]);
+                SetThicknesses(3, thicknessLists[2]);
             }
             else
                 throw new ArgumentException("You have to provide thickness tables for top flange, web and bottom flange");
+        }
+
+        /// <summary>
+        /// Set the thickness of flange and web, considering its change along bridge alignment
+        /// plateCode must be either of 0, 1, 2, 3 to represent 
+        /// top flange, left web, right web and bottom flange respectively
+        /// </summary>
+        /// <param name="plateCode"></param>
+        /// <param name="thicknessList"></param>
+        public void SetThicknesses(int plateCode, List<(double dist, double thickness)> thicknessList)
+        {
+            if (plateCode > 3 || plateCode < 0)
+                throw new ArgumentException("plateCode must be either of 0, 1, 2, 3");
+            PlateThicknessLists[plateCode] = thicknessList;
+        }
+
+        public void SetThickness(int plateCode, double distanceAlong, double thickness)
+        {
+            // not implemented
+            if (plateCode > 3 || plateCode < 0)
+                throw new ArgumentException("plateCode must be either of 0, 1, 2, 3");
         }
 
         public void AddStiffenerType(int id, List<double> dimensions)
@@ -249,471 +303,96 @@ namespace ifc2mct.BridgeFactory
                 if (!DiaphragmTypeTable.ContainsKey(typeId))
                     throw new ArgumentException($"Diaphragm type with id {typeId} has not been defined");
             DiaphragmList = list;
-        }
+        }        
 
-        public void Run()
+        public void Build()
         {
-            using (var model = CreateAndInitModel("SteelBoxBridge"))
+            InitWCS();
+            var site = _model.Instances.OfType<IfcSite>().FirstOrDefault();
+            if (site == null)
+                throw new NotSupportedException("Input IFC file must include an instance of IfcSite");
+            var alignment = _model.Instances.OfType<IfcAlignment>().FirstOrDefault();
+            if (alignment == null)
+                throw new NotSupportedException("Input IFC file must include an instance of IfcAlignment");
+            BridgeAlignmentCurve = AddBridgeAlignment(alignment);
+
+            // Build the superstructure of a steel-box-girder bridge
+            var girder = CreateSteelBoxGirder(BridgeAlignmentCurve);
+            IfcModelBuilder.AddProductIntoSpatial(_model, site, girder, "Add the girder to site");
+
+            // Build the bearings
+            var bearings = CreateBearings(girder);
+            foreach (var bearing in bearings)
+                IfcModelBuilder.AddProductIntoSpatial(_model, site, bearing, "Add the bearing to site");
+
+            try
             {
-                if (model != null)
-                {
-                    InitWCS(model);
-                    string info = "";
-                    if (BuildBridge(model, ref info))
-                    {
-                        try
-                        {
-                            Console.WriteLine(info);
-                            model.SaveAs(_outputPath, StorageType.Ifc);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Failed to save {0}", _outputPath);
-                            Console.WriteLine(e.Message);
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Failed to build bridge model because {0}", info);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Failed to initialise the model");
-                }
+                _model.SaveAs(_outputPath, StorageType.Ifc);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Failed to save {0}", _outputPath);
+                Console.WriteLine(e.Message);
             }
         }
 
-        public void Run2()
+        // Utilities        
+        private void InitWCS()
         {
-            using (var model = CreateAndInitModel(_projectName))
+            using (var txn = this._model.BeginTransaction("Initialise WCS"))
             {
-                if (model != null)
-                {
-                    InitWCS(model);
-                    string info = "";
-                    if (BuildBridge2(model, ref info))
-                    {
-                        try
-                        {
-                            Console.WriteLine(info);
-                            model.SaveAs(_outputPath, StorageType.Ifc);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Failed to save {0}", _outputPath);
-                            Console.WriteLine(e.Message);
-                        }
-                    }
-                    else
-                        Console.WriteLine("Failed to build bridge model because {0}", info);                    
-                }
-                else
-                    Console.WriteLine("Failed to initialise the model");
-            }
-        }
-
-        public void Run3()
-        {
-            using (var model = CreateAndInitModel(_projectName))
-            {
-                if (model != null)
-                {
-                    InitWCS(model);
-                    if (BuildSectionedSolid(model))
-                    {
-                        try
-                        {
-                            model.SaveAs(_outputPath, StorageType.Ifc);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Failed to save {0}", _outputPath);
-                            Console.WriteLine(e.Message);
-                        }
-                    }
-                    else
-                        Console.WriteLine("Failed to build bridge model");
-                }
-                else
-                    Console.WriteLine("Failed to initialise the model");
-            }
-        }
-
-        // Utilities
-
-        /// <summary>
-        /// Sets up the basic parameters any model must provide, units, ownership etc
-        /// </summary>
-        /// <param name="projectName"></param>
-        /// <returns></returns>
-        private IfcStore CreateAndInitModel(string projectName)
-        {
-            // First we need to set up some credentials for ownership of data in the new model
-            var credentials = new XbimEditorCredentials
-            {
-                ApplicationDevelopersName = "lky",
-                ApplicationFullName = "Steel Box Girder Builder",
-                ApplicationIdentifier = "",
-                ApplicationVersion = "1.0",
-                EditorsFamilyName = "lyu",
-                EditorsGivenName = "kaiyuan",
-                EditorsOrganisationName = "TJU"
-            };
-
-            // Now we can create an IfcStore, it is in IFC4x1 format and will be held in memory
-            var model = IfcStore.Create(credentials, XbimSchemaVersion.Ifc4x1, XbimStoreType.InMemoryModel);
-
-            // Begin a transaction as all changes to a model are ACID
-            using (var txn = model.BeginTransaction("Initialise Model"))
-            {
-                // Create a project
-                var project = model.Instances.New<IfcProject>(p =>
-                {
-                    // Set the units to SI (mm and metres)
-                    p.Initialize(ProjectUnits.SIUnitsUK);
-                    p.Name = projectName;
-                });
-                // Now commit the changes, else they will be rolled back 
-                // at the end of the scope of the using statement
-                txn.Commit();
-            }
-            return model;
-        }
-
-        private void InitWCS(IfcStore m)
-        {
-            using (var txn = m.BeginTransaction("Initialise WCS"))
-            {
-                var context3D = m.Instances.OfType<IfcGeometricRepresentationContext>()
+                var context3D = this._model.Instances.OfType<IfcGeometricRepresentationContext>()
                 .Where(c => c.CoordinateSpaceDimension == 3)
                 .FirstOrDefault();
                 if (context3D.WorldCoordinateSystem is IfcAxis2Placement3D wcs)
                 {
                     WCS = wcs;
                     Origin3D = wcs.Location;
-                    AxisZ3D = IfcModelBuilder.MakeDirection(m, 0, 0, 1);
+                    AxisZ3D = IfcModelBuilder.MakeDirection(_model, 0, 0, 1);
                     wcs.Axis = AxisZ3D;
-                    AxisX3D = IfcModelBuilder.MakeDirection(m, 1, 0, 0);
+                    AxisX3D = IfcModelBuilder.MakeDirection(_model, 1, 0, 0);
                     wcs.RefDirection = AxisX3D;
-                    AxisY3D = IfcModelBuilder.MakeDirection(m, 0, 1, 0);
+                    AxisY3D = IfcModelBuilder.MakeDirection(_model, 0, 1, 0);
                 }
 
-                var context2D = m.Instances.OfType<IfcGeometricRepresentationContext>()
+                var context2D = this._model.Instances.OfType<IfcGeometricRepresentationContext>()
                     .Where(c => c.CoordinateSpaceDimension == 2)
                     .FirstOrDefault();
                 if (context2D.WorldCoordinateSystem is IfcAxis2Placement2D wcs2d)
                 {
                     WCS2D = wcs2d;
                     Origin2D = wcs2d.Location;
-                    AxisX2D = IfcModelBuilder.MakeDirection(m, 1, 0);
+                    AxisX2D = IfcModelBuilder.MakeDirection(_model, 1, 0);
                     wcs2d.RefDirection = AxisX2D;
-                    AxisY2D = IfcModelBuilder.MakeDirection(m, 0, 1);
+                    AxisY2D = IfcModelBuilder.MakeDirection(_model, 0, 1);
                 }
 
                 txn.Commit();
             }
-        }
-
-        private bool BuildBridge(IfcStore m, ref string info)
-        {
-            var site = CreateSite(m, "Site #1");
-            if (site == null)
-            {
-                info = "failed to create site"; return false;              
-            }
-
-            // Create an instance of IfcAlignment and add it to the instance of spatial structure element IfcSite
-            var alignment = CreateAlignment(m, "Center Alignment");
-            if (alignment == null)
-            {
-                info = "failed to create alignment"; return false;                
-            }            
-            AddElementToSpatial(m, site, alignment, "Add an alignment instance to site");
-
-            // Build a steel-box-girder as superstructure based on the alignment curve created before,
-            // using instances of IfcElementAssembly to group all sub-elements
-            const double START = 10000;
-            const double LENGTH = 36000;
-            var DIMENSIONS = new List<double>() { 1750, 6400, 50, 6000, 2000, 16, 16, 14 };
-            var girder = CreateSteelBoxGirder(m, "SW3-SW4", alignment.Axis, START, LENGTH, DIMENSIONS);  
-            if (girder == null)
-            {
-                info = "failed to create girder"; return false;
-            }
-            AddElementToSpatial(m, site, girder, "Add a girder to site");
-
-            info = "Successfully created ifc model";
-            return true;
-        }
-
-        private bool BuildBridge2(IfcStore m, ref string info)
-        {
-            // Create spatial element to hold the created alignment
-            var site = CreateSite(m, "site #1");
-            //var alignment = CreateAlignment(m, "Road Alignment");
-            var alignment = CreateAlignment(m, "SW匝道道路设计中心线");
-            if (alignment == null)
-            {
-                info = "failed to create alignment";
-                return false;
-            }
-            AddElementToSpatial(m, site, alignment, "Add the alignment to site");
-            BridgeAlignmentCurve = AddBridgeAlignment(m, alignment);
-            // Build the superstructure of a steel-box-girder bridge
-            var girder = CreateSteelBoxGirder2(m, BridgeAlignmentCurve);
-            AddElementToSpatial(m, site, girder, "Add the girder to site");
-
-            // Build the bearings
-            var bearings = CreateBearings(m);
-            foreach (var bearing in bearings)
-                AddElementToSpatial(m, site, bearing, "Add the bearing to site");
-
-            info = "successfully created bridge model";
-            return true;
-        }
-
-        private bool BuildSectionedSolid(IfcStore m)
-        {
-            // Create spatial element to hold the created alignment
-            var site = CreateSite(m, "site #1");
-            //var alignment = CreateAlignment(m, "Road Alignment");
-            var alignment = CreateAlignment(m, "Road alignment");
-            if (alignment == null)
-                return false;
-            AddElementToSpatial(m, site, alignment, "Add the alignment to site");
-
-            BridgeStart = 20000;
-            BridgeEnd = 50000;
-            BridgeAlignmentCurve = AddBridgeAlignment(m, alignment);
-            IfcPlate plate = null;
-            using (var txn = m.BeginTransaction())
-            {
-                var solid = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
-                {
-                    s.Directrix = BridgeAlignmentCurve;
-                    //var profile = CreateStiffenerProfile(m, new List<double>() { 280, 300, 170, 8, 50 }, new XbimVector3D(0, -1, 0));
-                    var profile = CreateStiffenerProfile(m, new List<double>() { 500, 16}, new XbimVector3D(1, 0, 0));
-                    s.CrossSections.AddRange(new List<IfcProfileDef>() { profile, profile });
-                    var pos1 = IfcModelBuilder.MakeDistanceExpression(m, 40, -200, 1000);
-                    var pos2 = IfcModelBuilder.MakeDistanceExpression(m, BridgeEnd - BridgeStart - 40, -200, 1000);
-                    s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
-                });
-                var solid2 = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
-                {
-                    s.Directrix = BridgeAlignmentCurve;
-                    var profile = CreateStiffenerProfile(m, new List<double>() { 280, 300, 170, 8, 50 }, new XbimVector3D(0, -1, 0));                    
-                    s.CrossSections.AddRange(new List<IfcProfileDef>() { profile, profile });
-                    var pos1 = IfcModelBuilder.MakeDistanceExpression(m, 40, 0, 1000);
-                    var pos2 = IfcModelBuilder.MakeDistanceExpression(m, BridgeEnd - BridgeStart - 40, 0, 1000);
-                    s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
-                });
-                var shape = m.Instances.New<IfcShapeRepresentation>(s =>
-                {
-                    s.ContextOfItems = m.Instances.OfType<IfcGeometricRepresentationContext>()
-                        .Where(c => c.CoordinateSpaceDimension == 3)
-                        .FirstOrDefault();
-                    s.RepresentationIdentifier = "Body";
-                    s.RepresentationType = "AdvancedSweptSolid";
-                    s.Items.Add(solid);
-                    s.Items.Add(solid2);
-                });
-                plate = m.Instances.New<IfcPlate>(p =>
-                {
-                    p.ObjectPlacement = m.Instances.New<IfcLinearPlacement>(lp =>
-                    {
-                        lp.PlacementRelTo = BridgeAlignmentCurve;
-                        lp.Distance = m.Instances.New<IfcDistanceExpression>(d =>
-                        {
-                            d.DistanceAlong = BridgeStart;
-                        });
-                    });
-                    p.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
-                    //p.PredefinedType = (part == 0 || part == 1) ? IfcPlateTypeEnum.FLANGE_PLATE : IfcPlateTypeEnum.WEB_PLATE; // IFC4x2 feature
-                });
-                txn.Commit();
-            }                
-            AddElementToSpatial(m, site, plate, "Add plate to site");
-
-            return true;
-        }
-
-        /// <summary>
-        /// Add a physical product into a spatial structure element in the scope of a transaction
-        /// </summary>
-        /// <param name="m"></param>
-        /// <param name="spatial"></param>
-        /// <param name="e"></param>
-        /// <param name="info"></param>
-        private void AddElementToSpatial(IfcStore m, IfcSpatialStructureElement spatial, IfcProduct e, string info)
-        {
-            using (var txn = m.BeginTransaction(info))
-            {
-                spatial.AddElement(e);
-                txn.Commit();
-            }
-        }
-
-        /// <summary>
-        /// Create site by given name, set its CompositionType to ELEMENT,
-        /// then add it to the already existed project.
-        /// </summary>
-        /// <param name="m"></param>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        private IfcSite CreateSite(IfcStore m, string name)
-        {
-            using (var txn = m.BeginTransaction("Create Site"))
-            {
-                var site = m.Instances.New<IfcSite>(s =>
-                {
-                    s.Name = name;
-                    s.CompositionType = IfcElementCompositionEnum.ELEMENT;
-                });
-                // Get the only one project and add site to it
-                var project = m.Instances.OfType<IfcProject>().FirstOrDefault();
-                project?.AddSite(site);
-
-                txn.Commit();
-                return site;
-            }
-        }
-
-        private IfcAlignment CreateStraightAlignment(IfcStore m, string name)
-        {
-            const int LENGTH = 100000; // the segment length of the arc is 100m
-            const double DIRECTION = Math.PI / 6; // the start direction of  the arc
-            const int DISTANCE = 0; // the vertical segment starts at 10m along horizontal curve
-            const int LENGTH2 = 100000; // the length of vertical segement is 80m along horizontal
-            const int HEIGHT = 15000; // the vertical segment starts at 15m high
-            const double GRADIENT = 0.0; // the gradient of the line vertical segment
-            using (var txn = m.BeginTransaction("Create Alignment"))
-            {
-                // Create an alignment curve holding only one arc segment as horizontal
-                // and only one line segment as vertical                
-                var alignCurve = m.Instances.New<IfcAlignmentCurve>(ac =>
-                {
-                    var lineSeg = m.Instances.New<IfcAlignment2DHorizontalSegment>(s =>
-                    {
-                        s.CurveGeometry = IfcModelBuilder.MakeLineSegment2D(m, Origin2D, DIRECTION, LENGTH);
-                        s.TangentialContinuity = true;
-                    });
-                    ac.Horizontal = m.Instances.New<IfcAlignment2DHorizontal>(h => h.Segments.Add(lineSeg));
-                    var segLine = m.Instances.New<IfcAlignment2DVerSegLine>(sl =>
-                    {
-                        sl.StartDistAlong = DISTANCE;
-                        sl.StartHeight = HEIGHT;
-                        sl.HorizontalLength = LENGTH2;
-                        sl.StartGradient = GRADIENT;
-                        sl.TangentialContinuity = true;
-                    });
-                    ac.Vertical = m.Instances.New<IfcAlignment2DVertical>(v => v.Segments.Add(segLine));
-                    ac.Tag = "Road alignment curve";
-                });
-                var align = m.Instances.New<IfcAlignment>(a =>
-                {
-                    a.Name = name;
-                    a.ObjectPlacement = m.Instances.New<IfcLocalPlacement>(p => p.RelativePlacement = WCS);
-                    a.Axis = alignCurve;
-                });
-
-                txn.Commit();
-                return align;
-            }
-        }
-
-        /// <summary>
-        /// Create an instance of IfcAlignment to hold the alignment curve
-        /// with some default geometric parameters
-        /// </summary>
-        /// <param name="m"></param>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        private IfcAlignment CreateAlignment(IfcStore m, string name)
-        {
-            const int RADIUS = 150000; // the radius of the arc is 150m
-            const int LENGTH = 150000; // the segment length of the arc is 150m
-            const double DIRECTION = 0/*Math.PI / 6*/; // the start direction of the arc
-            const bool ISCCW = true; // the orientation of the arc is clockwise
-            const int DISTANCE = 0; // the vertical segment starts at 0m
-            const int LENGTH2 = 150000; // the length of vertical segement is 150m along horizontal
-            const int HEIGHT = 15000; // the vertical segment starts at 15m high
-            const double GRADIENT = 0.02; // the gradient of the line vertical segment
-            using (var txn = m.BeginTransaction("Create Alignment"))
-            {
-                // Create an alignment curve holding only one arc segment as horizontal
-                // and only one line segment as vertical                
-                var alignCurve = m.Instances.New<IfcAlignmentCurve>(ac =>
-                {
-                    var arcSeg = m.Instances.New<IfcAlignment2DHorizontalSegment>(s =>
-                    {
-                        s.CurveGeometry = IfcModelBuilder.MakeCircularArcSegment2D(m, Origin2D, DIRECTION, LENGTH, RADIUS, ISCCW);
-                        s.TangentialContinuity = true;
-                    });
-                    ac.Horizontal = m.Instances.New<IfcAlignment2DHorizontal>(h => h.Segments.Add(arcSeg));
-                    var segLine = m.Instances.New<IfcAlignment2DVerSegLine>(sl =>
-                    {
-                        sl.StartDistAlong = DISTANCE;
-                        sl.StartHeight = HEIGHT;
-                        sl.HorizontalLength = LENGTH2;
-                        sl.StartGradient = GRADIENT;
-                        sl.TangentialContinuity = true;
-                    });
-                    ac.Vertical = m.Instances.New<IfcAlignment2DVertical>(v => v.Segments.Add(segLine));                    
-                    ac.Tag = "Center curve of the road";
-                });
-                var align = m.Instances.New<IfcAlignment>(a =>
-                {
-                    a.Name = name;
-                    a.ObjectPlacement = m.Instances.New<IfcLocalPlacement>(p => p.RelativePlacement = WCS);
-                    a.Axis = alignCurve;
-                    var offsetCurveSolid = CreateSolidShapeForCurve(m, alignCurve, 0, LENGTH);
-                    SetSurfaceStyle(m, offsetCurveSolid, 1, 0, 0);
-                    var bodyShape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "AdvancedSweptSolid");
-                    bodyShape.Items.Add(offsetCurveSolid);
-                    a.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(bodyShape));
-                });
-
-                txn.Commit();
-                return align;
-            }
-        }
-
-        private IfcSectionedSolidHorizontal CreateSolidShapeForCurve(IfcStore m, IfcCurve directrix, double start, double end)
-        {
-            return m.Instances.New<IfcSectionedSolidHorizontal>(ss =>
-            {
-                ss.Directrix = directrix;
-                var profile = IfcModelBuilder.MakeCircleProfile(m, 40);
-                ss.CrossSections.AddRange(new List<IfcProfileDef>() { profile, profile });
-                ss.CrossSectionPositions.Add(IfcModelBuilder.MakeDistanceExpression(m, start));
-                ss.CrossSectionPositions.Add(IfcModelBuilder.MakeDistanceExpression(m, end));
-            });
-        }
+        }                             
 
         /// <summary>
         /// Create an offset alignment curve based on the main alignment curve 
         /// and add it to the main alignment's shape representation
         /// </summary>
-        /// <param name="m"></param>
         /// <param name="mainAlignment"></param>
         /// <returns></returns>
-        private IfcCurve AddBridgeAlignment(IfcStore m, IfcAlignment mainAlignment)
+        private IfcCurve AddBridgeAlignment(IfcAlignment mainAlignment)
         {
-            using (var txn = m.BeginTransaction("Add offset curve"))
+            using (var txn = this._model.BeginTransaction("Add offset curve"))
             {
-                var offsetCurve = m.Instances.New<IfcOffsetCurveByDistances>(c =>
+                var offsetCurve = this._model.Instances.New<IfcOffsetCurveByDistances>(c =>
                 {
                     c.BasisCurve = mainAlignment.Axis;
-                    c.OffsetValues.Add(IfcModelBuilder.MakeDistanceExpression(m, BridgeStart, BridgeAlignmentLatOff, BridgeAlignmentVerOff));
-                    c.OffsetValues.Add(IfcModelBuilder.MakeDistanceExpression(m, BridgeEnd, BridgeAlignmentLatOff, BridgeAlignmentVerOff));
+                    c.OffsetValues.Add(IfcModelBuilder.MakeDistanceExpression(_model, BridgeStart, BridgeAlignmentLatOff, BridgeAlignmentVerOff));
+                    c.OffsetValues.Add(IfcModelBuilder.MakeDistanceExpression(_model, BridgeEnd, BridgeAlignmentLatOff, BridgeAlignmentVerOff));
                     c.Tag = "Bridge alignment curve";
                 });
-                var offsetCurveSolid = CreateSolidShapeForCurve(m, offsetCurve, 0, BridgeEnd - BridgeStart);
-                SetSurfaceStyle(m, offsetCurveSolid, 0, 0, 1);
+                var offsetCurveSolid = IfcModelBuilder.CreateSolidShapeForCurve(_model, offsetCurve, 0, BridgeEnd - BridgeStart);
+                IfcModelBuilder.SetSurfaceStyle(_model, offsetCurveSolid, 0, 0, 1);
                 mainAlignment.Representation.Representations.FirstOrDefault(r => r.RepresentationIdentifier == "Body").Items.Add(offsetCurveSolid);
 
-                var shape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "StringLines", "OffsetCurves");
+                var shape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "StringLines", "OffsetCurves");
                 shape.Items.Add(offsetCurve);                
                 mainAlignment.Representation.Representations.Add(shape);
                 
@@ -722,11 +401,11 @@ namespace ifc2mct.BridgeFactory
             }                
         }
 
-        private IfcElementAssembly CreateSteelBoxGirder2(IfcStore m, IfcCurve directrix)
+        private IfcElementAssembly CreateSteelBoxGirder(IfcCurve directrix)
         {
-            using (var txn = m.BeginTransaction("Create steel-box-girder"))
+            using (var txn = this._model.BeginTransaction("Create steel-box-girder"))
             {
-                var girder = m.Instances.New<IfcElementAssembly>(g =>
+                var girder = this._model.Instances.New<IfcElementAssembly>(g =>
                 {
                     g.Name = _bridgeName;
                     g.Description = "Steel-box-girder";
@@ -734,35 +413,32 @@ namespace ifc2mct.BridgeFactory
                 });
 
                 // Set material for this girder
-                CreateMaterialForGirder(m, girder);
+                CreateMaterialForGirder(girder);
 
                 // 0 for top flange, 1 for left web, 2 for right web, 3 for bottom flange
                 var plateCodes = new List<int>() { 0, 1, 2, 3 };
-                var plates = plateCodes.Select(c => CreateSingleBoxPlate2(m, directrix, c)).ToList();
+                var plates = plateCodes.Select(c => CreateBoxPlate(directrix, c)).ToList();
                 foreach (var stiffenerLists in StiffenerLists)
                 {
                     var plateCode = stiffenerLists.Key;
                     foreach (var stiffenerList in stiffenerLists.Value)
                     {
-                        var stiffenerGroup = CreateStiffeners(m, plateCode, stiffenerList);
-                        m.Instances.New<IfcRelConnectsElements>(rce =>
+                        var stiffenerGroup = CreateStiffeners(plateCode, stiffenerList);
+                        var rel = this._model.Instances.New<IfcRelAggregates>(ra =>
                         {
-                            rce.RelatedElement = plates[plateCode];
-                            rce.RelatingElement = stiffenerGroup;
+                            ra.RelatingObject = plates[plateCode];
+                            ra.RelatedObjects.Add(stiffenerGroup);
                         });
                     }
                 }
-                
-                var diaphragms = CreateDiaphragms(m);
+
+                var diaphragms = CreateDiaphragms();
 
                 // Aggregate flanges and webs into the girder assembly
-                var relAggregates = m.Instances.New<IfcRelAggregates>(r =>
+                var relAggregates = this._model.Instances.New<IfcRelAggregates>(r =>
                 {
                     r.RelatingObject = girder;
                     r.RelatedObjects.AddRange(plates);
-                    foreach (var plate in plates)
-                        foreach (var connect in plate.ConnectedFrom)
-                            r.RelatedObjects.Add(connect.RelatingElement);
                     foreach (var diaphragm in diaphragms)
                         r.RelatedObjects.Add(diaphragm);
                 });
@@ -772,14 +448,20 @@ namespace ifc2mct.BridgeFactory
             }
         }
 
-        private IfcPlate CreateSingleBoxPlate2(IfcStore m, IfcCurve directrix, int plateCode)
-        {
-            double x1 = 0, y1 = 0, x2 = 0, y2 = 0, t = 0, offsetLateral = 0, offsetVertical = 0;
-            string name = "";
+        private IfcElementAssembly CreateBoxPlate(IfcCurve directrix, int plateCode)
+        {            
+            var plateAssembly = this._model.Instances.New<IfcElementAssembly>(ea => 
+            {
+                ea.Name = plateCode == 0 ? "顶板" : (plateCode == 1 ? "左腹板" : (plateCode == 2 ? "右腹板" : "底板"));
+                ea.ObjectType = plateCode == 0 ? "TOP_FLANGE" : (plateCode == 3 ? "BOTTOM_FLANGE" : "WEB");
+                ea.PredefinedType = IfcElementAssemblyTypeEnum.USERDEFINED;
+            });
+            var relAggregates = this._model.Instances.New<IfcRelAggregates>(rg => rg.RelatingObject = plateAssembly);
+            
+            double x1 = 0, y1 = 0, x2 = 0, y2 = 0, t = 0, offsetLateral = 0, offsetVertical = 0;            
             var thicknessList = PlateThicknessLists[plateCode];
-            var lastDistanceAlong = StartGap;
-            var shape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "AdvancedSweptSolid");
-
+            var lastDistanceAlong = StartGap;            
+            
             for (int i = 0; i < thicknessList.Count; ++i)
             {
                 var start = lastDistanceAlong;
@@ -794,196 +476,267 @@ namespace ifc2mct.BridgeFactory
                         x1 = dimensions["B1"] + dimensions["B2"] / 2;
                         y1 = thicknessList[i].thickness / 2;
                         x2 = -x1; y2 = y1; t = thicknessList[i].thickness;
-                        name = "顶板"; break;                    
+                        break;                    
                     case 1:
                         x1 = 0; y1 = 0;
                         x2 = (dimensions["B5"] - dimensions["B2"]) / 2; y2 = -dimensions["H"];
                         t = thicknessList[i].thickness; offsetLateral = dimensions["B2"] / 2;
-                        name = "腹板"; break;
+                        break;
                     case 2:
                         x1 = 0; y1 = 0;
                         x2 = (dimensions["B2"] - dimensions["B5"]) / 2; y2 = -dimensions["H"];
                         t = thicknessList[i].thickness; offsetLateral = -dimensions["B2"] / 2;
-                        name = "腹板"; break;
+                        break;
                     case 3:
                         x1 = dimensions["B4"] + dimensions["B5"] / 2;
                         y1 = -thicknessList[i].thickness / 2;
                         x2 = -x1; y2 = y1; t = thicknessList[i].thickness;
                         offsetVertical = -dimensions["H"];
-                        name = "底板"; break;
+                        break;
                     default: break;
                 }
-                var solid = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
+                var solid = this._model.Instances.New<IfcSectionedSolidHorizontal>(s =>
                 {
                     s.Directrix = directrix;
-                    var p1 = IfcModelBuilder.MakeCartesianPoint(m, x1, y1);
-                    var p2 = IfcModelBuilder.MakeCartesianPoint(m, x2, y2);
-                    var line = IfcModelBuilder.MakePolyline(m, new List<IfcCartesianPoint>() { p1, p2 });
-                    var profile = IfcModelBuilder.MakeCenterLineProfile(m, line, t);
-                    s.CrossSections.AddRange(new List<IfcProfileDef>() { profile, profile });
-                    var pos1 = IfcModelBuilder.MakeDistanceExpression(m, start, offsetLateral, offsetVertical);
-                    var pos2 = IfcModelBuilder.MakeDistanceExpression(m, end, offsetLateral, offsetVertical);
-                    s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
+                    var p1 = IfcModelBuilder.MakeCartesianPoint(_model, x1, y1);
+                    var p2 = IfcModelBuilder.MakeCartesianPoint(_model, x2, y2);
+                    var line = IfcModelBuilder.MakePolyline(_model, new List<IfcCartesianPoint>() { p1, p2 });
+                    var profile = IfcModelBuilder.MakeCenterLineProfile(_model, line, t);
+                    s.CrossSections.Add(profile);
+                    s.CrossSections.Add(profile);
+                    var pos1 = IfcModelBuilder.MakeDistanceExpression(_model, start, offsetLateral, offsetVertical);
+                    var pos2 = IfcModelBuilder.MakeDistanceExpression(_model, end, offsetLateral, offsetVertical);
+                    s.CrossSectionPositions.Add(pos1);
+                    s.CrossSectionPositions.Add(pos2);
                 });
-                SetSurfaceStyle(m, solid, 124.0 / 255.0, 51.0 / 255.0, 49.0 / 255.0, 0.15);
+                IfcModelBuilder.SetSurfaceStyle(_model, solid, 124.0 / 255.0, 51.0 / 255.0, 49.0 / 255.0, 0.15);
+                var shape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "Body", "AdvancedSweptSolid");
                 shape.Items.Add(solid);
                 lastDistanceAlong = end;
-            }
-                                   
-            var plate = m.Instances.New<IfcPlate>(p =>
-            {
-                p.Name = name;
-                p.ObjectType = (plateCode == 0 || plateCode == 3) ? "FLANGE_PLATE" : "WEB_PLATE";
-                p.ObjectPlacement = m.Instances.New<IfcLinearPlacement>(lp =>
+
+                var plate = this._model.Instances.New<IfcPlate>(p =>
                 {
-                    lp.PlacementRelTo = directrix;
-                    lp.Distance = m.Instances.New<IfcDistanceExpression>(d =>
-                    {
-                        d.DistanceAlong = StartGap;
-                        d.OffsetVertical = offsetVertical;
-                        d.OffsetLateral = offsetLateral;
-                    });
+                    p.Name = $"{plateAssembly.Name}-0{i + 1}";
+                    p.ObjectType = (plateCode == 0 || plateCode == 3) ? "FLANGE_PLATE" : "WEB_PLATE";
+                    p.Representation = this._model.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
+                    p.PredefinedType = IfcPlateTypeEnum.USERDEFINED;
+                    //p.PredefinedType = (part == 0 || part == 1) ? IfcPlateTypeEnum.FLANGE_PLATE : IfcPlateTypeEnum.WEB_PLATE; // IFC4x2 feature
                 });
-                p.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
-                p.PredefinedType = IfcPlateTypeEnum.USERDEFINED;
-                //p.PredefinedType = (part == 0 || part == 1) ? IfcPlateTypeEnum.FLANGE_PLATE : IfcPlateTypeEnum.WEB_PLATE; // IFC4x2 feature
-            });
-            return plate;
+                relAggregates.RelatedObjects.Add(plate);
+            }
+                                               
+            return plateAssembly;
         }
 
-        private IfcMember CreateStiffeners(IfcStore m, int plateCode, List<(double distanceAlong, int typeId, int layoutId)> stiffenerList)
+        private IfcElementAssembly CreateStiffeners(int plateCode, List<(double distanceAlong, int typeId, int layoutId)> stiffenerList)
         {
-            string tag = "";
-            var stiffShape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "AdvancedSweptSolid");
+            int dimensionNum = 0;
+            var stiffenerAssembly = this._model.Instances.New<IfcElementAssembly>(ea => 
+            {
+                string assemblyName = plateCode == 0 ? "顶板纵肋" : (plateCode == 3 ? "底板纵肋" : "腹板纵肋");
+                ea.Name = assemblyName;
+                if (stiffenerList.Any())
+                {
+                    dimensionNum = StiffenerTypeTable[stiffenerList[0].typeId].Count;
+                    ea.Tag = dimensionNum == 5 ? "U-shape" : (dimensionNum == 2 ? "Flat" : "T-shape");
+                }
+            });
+            var relAggregates = this._model.Instances.New<IfcRelAggregates>(rg => rg.RelatingObject = stiffenerAssembly);
             var lastDistanceAlong = StartGap;
-            var propertySet = m.Instances.New<IfcPropertySet>(ps => ps.Name = "Dimensions");
-            var dimensionTable = m.Instances.New<IfcPropertyTableValue>();
+
+            int stiffenerCounter = 1;
             foreach (var (distanceAlong, typeId, layoutId) in stiffenerList)
             {
                 var start = lastDistanceAlong;
                 var end = distanceAlong;
                 var dimensions = StiffenerTypeTable[typeId];
-                if (tag == "")
-                    tag = dimensions.Count == 5 ? "U形肋" : (dimensions.Count == 2 ? "板肋" : "T形肋");
-                var stiffenerProfile = CreateStiffenerProfile(m, dimensions, GetStiffenerDirection(plateCode));
+                string name = dimensionNum == 5 ? "U形肋" : (dimensionNum == 2 ? "板肋" : "T形肋");
+                var profile = CreateStiffenerProfile(dimensions, GetStiffenerDirection(plateCode));
                 var refPoint = GetRefPoint(plateCode);
                 var offsetDirection = GetOffsetDirection(plateCode);
                 foreach (var (num, gap) in StiffenerLayoutTable[layoutId])
                 {
                     for (int i = 0; i < num; ++i)
                     {
-                        var stiff = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
+                        var stiffShape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "Body", "AdvancedSweptSolid");
+                        var stiffenerSolid = this._model.Instances.New<IfcSectionedSolidHorizontal>(s =>
                         {
                             s.Directrix = BridgeAlignmentCurve;
-                            s.CrossSections.AddRange(new List<IfcProfileDef>() { stiffenerProfile, stiffenerProfile });
+                            s.CrossSections.Add(profile);
+                            s.CrossSections.Add(profile);
                             refPoint = refPoint + gap * offsetDirection;
-                            var pos1 = IfcModelBuilder.MakeDistanceExpression(m, start, refPoint.X, refPoint.Y);
-                            var pos2 = IfcModelBuilder.MakeDistanceExpression(m, end, refPoint.X, refPoint.Y);
-                            s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
+                            var pos1 = IfcModelBuilder.MakeDistanceExpression(_model, start, refPoint.X, refPoint.Y);
+                            var pos2 = IfcModelBuilder.MakeDistanceExpression(_model, end, refPoint.X, refPoint.Y);
+                            s.CrossSectionPositions.Add(pos1);
+                            s.CrossSectionPositions.Add(pos2);
                         });
-                        //SetSurfaceStyle(m, stiff, 0.752941176470588, 0.313725490196078, 0.301960784313725);
-                        stiffShape.Items.Add(stiff);
+                        //IfcModelBuilder.SetSurfaceStyle(m, stiff, 0.752941176470588, 0.313725490196078, 0.301960784313725);
+                        stiffShape.Items.Add(stiffenerSolid);
+                        var stiffener = this._model.Instances.New<IfcMember>(sg =>
+                        {
+                            sg.Name = $"{name}-{stiffenerCounter++}";
+                            sg.ObjectType = "STIFFENING_RIB";
+                            sg.PredefinedType = IfcMemberTypeEnum.USERDEFINED;
+                            //sg.PredefinedType = IfcMemberTypeEnum.STIFFENING_RIB; // IFC4x2 features
+                            sg.Representation = this._model.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(stiffShape));
+                        });
+                        relAggregates.RelatedObjects.Add(stiffener);
                     }
                 }
-
                 lastDistanceAlong = distanceAlong;
             }
-
-            var stiffenerGroup = m.Instances.New<IfcMember>(sg =>
+            
+            var dimensionsTable = CreateStiffDimsPropSet(stiffenerList);
+            this._model.Instances.New<IfcRelDefinesByProperties>(rdbp =>
             {
-                sg.Name = plateCode == 0 ? "顶板纵肋" : (plateCode == 3 ? "底板纵肋" : "腹板纵肋");
-                //sg.Description = "STIFFENING_RIB";
-                sg.ObjectType = "STIFFENING_RIB";
-                sg.Tag = tag;
-                sg.PredefinedType = IfcMemberTypeEnum.USERDEFINED;
-                //sg.PredefinedType = IfcMemberTypeEnum.STIFFENING_RIB; // IFC4x2 features
-                sg.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(stiffShape));
+                rdbp.RelatedObjects.Add(stiffenerAssembly);
+                rdbp.RelatingPropertyDefinition = dimensionsTable;
             });
-            return stiffenerGroup;
+            return stiffenerAssembly;
         }
 
-        private List<IfcBuildingElementProxy> CreateBearings(IfcStore m)
+        private IfcPropertySet CreateStiffDimsPropSet(List<(double distanceAlong, int typeId, int layoutId)> stiffenerList)
         {
-            var bearings = new List<IfcBuildingElementProxy>();
+            var propSet = _model.Instances.New<IfcPropertySet>(ps => ps.Name = "Dimensions");
+            double start = StartGap;
+            var dimensions = StiffenerTypeTable[stiffenerList.FirstOrDefault().typeId];
+            List<string> fieldNames = null;
+            if (dimensions.Count == 2)
+                // flat stiffener
+                fieldNames = new List<string>() { "H", "B" };
+            else if (dimensions.Count == 5)
+                // U-shape stiffener
+                fieldNames = new List<string>() { "H", "B1", "B2", "t", "R" };
+            else
+                // T-shape stiffener
+                fieldNames = new List<string>() { "H", "B", "tw", "tf" };
+            foreach (var name in fieldNames)
+                propSet.HasProperties.Add(IfcModelBuilder.MakePropertyTableValue(_model, name));
+            foreach (var (distanceAlong, typeId, layoutId) in stiffenerList)
+            {
+                dimensions = StiffenerTypeTable[typeId];
+                for (int i = 0; i < fieldNames.Count; ++i)
+                {
+                    var val = propSet.HasProperties.OfType<IfcPropertyTableValue>()
+                        .Where(p => p.Name == fieldNames[i]).FirstOrDefault();
+                    val.DefiningValues.Add(new IfcLengthMeasure(start));
+                    val.DefinedValues.Add(new IfcLengthMeasure(dimensions[i]));
+                }
+                start = distanceAlong;
+            }
+
+            return propSet;
+        }
+
+        private List<IfcProxy> CreateBearings(IfcElement girder)
+        {
+            var bearings = new List<IfcProxy>();
             foreach (var (distanceAlong, offsetLateral, bearingTypeId) in BearingList)
-                bearings.Add(CreateBearing(m, distanceAlong, offsetLateral, bearingTypeId));
+                bearings.Add(CreateBearing(distanceAlong, offsetLateral, bearingTypeId, girder));
                 //AddElementToSpatial(m, site, bearing, "Add the bearing to site");
             return bearings;
         }
 
-        private IfcBuildingElementProxy CreateBearing(IfcStore m, double dist, double offsetLateral, int typeId)
+        private IfcProxy CreateBearing(double dist, double offsetLateral, int typeId, IfcElement girder)
         {
-            using (var txn = m.BeginTransaction("Create bearings"))
+            using (var txn = this._model.BeginTransaction("Create bearings"))
             {                
-                var distance = IfcModelBuilder.MakeDistanceExpression(m, dist, offsetLateral, -SectionDimensions[4] - 100);
-
-                var shape = CreateBearingShape(m);
-                var bearing = m.Instances.New<IfcBuildingElementProxy>(b =>
-                {
-                    b.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(m, BridgeAlignmentCurve, distance);
-                    b.Name = "支座";
-                    b.ObjectType = "IFCBEARING";
-                    b.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
-                });
+                var distance = IfcModelBuilder.MakeDistanceExpression(_model, dist, offsetLateral, -SectionDimensions[4] - 100);
+                string name = "支座";                
 
                 // define bearing properties
                 var (fixedLateral, fixedLongitudinal, fixedVertical) = BearingTypeTable[typeId];
-                var pset_BearingCommon = m.Instances.New<IfcPropertySet>(ps =>
+                if (fixedVertical)
+                    name = "抗拉" + name;
+                if (fixedLateral && fixedLongitudinal)
+                    name = "固定" + name;
+                else if (fixedLateral || fixedLongitudinal)
+                    name = "单向滑动" + name;
+                else
+                    name = "双向滑动" + name;                
+                var pset_BearingCommon = _model.Instances.New<IfcPropertySet>(ps =>
                 {
                     ps.Name = "Pset_BearingCommon";
-                    var displacementAccomodated = m.Instances.New<IfcPropertyListValue>(l =>
+                    var displacementAccomodated = _model.Instances.New<IfcPropertyListValue>(l =>
                     {
                         l.Name = "DisplacementAccomodated";
                         l.ListValues.Add(new IfcBoolean(!fixedLongitudinal));
                         l.ListValues.Add(new IfcBoolean(!fixedLateral));
                         l.ListValues.Add(new IfcBoolean(!fixedVertical));
                     });
+                    var rotationAccomodated = this._model.Instances.New<IfcPropertyListValue>(l =>
+                    {
+                        l.Name = "RotationAccomodated";
+                        l.ListValues.Add(new IfcBoolean(true));
+                        l.ListValues.Add(new IfcBoolean(true));
+                        l.ListValues.Add(new IfcBoolean(true));
+                    });
                     ps.HasProperties.Add(displacementAccomodated);
+                    ps.HasProperties.Add(rotationAccomodated);
                 });
-                m.Instances.New<IfcRelDefinesByProperties>(r =>
+
+                var shape = CreateBearingShape();
+                var bearing = this._model.Instances.New<IfcProxy>(b =>
+                {
+                    b.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(_model, BridgeAlignmentCurve, distance);
+                    b.Name = name;
+                    b.Description = "IfcBearing";
+                    b.ProxyType = IfcObjectTypeEnum.PRODUCT;
+                    b.ObjectType = "POT";
+                    b.Representation = this._model.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
+                });
+
+                this._model.Instances.New<IfcRelDefinesByProperties>(r =>
                 {
                     r.RelatingPropertyDefinition = pset_BearingCommon;
                     r.RelatedObjects.Add(bearing);
                 });
+
+                // Connect bearing to girder
+                //m.Instances.New<IfcRelConnectsElements>(rce =>
+                //{
+                //    rce.RelatedElement = girder;
+                //    rce.RelatingElement = bearing;
+                //});
 
                 txn.Commit();
                 return bearing;
             }                
         }
 
-        private IfcShapeRepresentation CreateBearingShape(IfcStore m)
+        private IfcShapeRepresentation CreateBearingShape()
         {
-            var shape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "CSG");
-            var rectangle = IfcModelBuilder.MakeRectangleProfile(m, 940, 920);
-            var vzNegated = IfcModelBuilder.MakeDirection(m, 0, 0, -1);
-            var pos1 = IfcModelBuilder.MakeAxis2Placement3D(m);            
-            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(m, rectangle, pos1, vzNegated, 50));
+            var shape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "Body", "CSG");
+            var rectangle = IfcModelBuilder.MakeRectangleProfile(_model, 940, 920);
+            var vzNegated = IfcModelBuilder.MakeDirection(_model, 0, 0, -1);
+            var pos1 = IfcModelBuilder.MakeAxis2Placement3D(_model);            
+            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(_model, rectangle, pos1, vzNegated, 50));
 
-            var rectangle2 = IfcModelBuilder.MakeRectangleProfile(m, 80, 920);
-            var pos4 = IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, -410, 0, -50));            
-            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(m, rectangle2, pos4, vzNegated, 80));
+            var rectangle2 = IfcModelBuilder.MakeRectangleProfile(_model, 80, 920);
+            var pos4 = IfcModelBuilder.MakeAxis2Placement3D(_model, IfcModelBuilder.MakeCartesianPoint(_model, -410, 0, -50));            
+            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(_model, rectangle2, pos4, vzNegated, 80));
 
-            var pos5 = IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, 410, 0, -50));
-            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(m, rectangle2, pos5, vzNegated, 80));
+            var pos5 = IfcModelBuilder.MakeAxis2Placement3D(_model, IfcModelBuilder.MakeCartesianPoint(_model, 410, 0, -50));
+            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(_model, rectangle2, pos5, vzNegated, 80));
 
-            var rectangle3 = IfcModelBuilder.MakeRectangleProfile(m, 740, 850);
-            var pos6 = IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, 0, 0, -50));
-            var solid = IfcModelBuilder.MakeExtrudedAreaSolid(m, rectangle3, pos6, vzNegated, 70);
-            SetSurfaceStyle(m, solid, 1, 0, 0);
+            var rectangle3 = IfcModelBuilder.MakeRectangleProfile(_model, 740, 850);
+            var pos6 = IfcModelBuilder.MakeAxis2Placement3D(_model, IfcModelBuilder.MakeCartesianPoint(_model, 0, 0, -50));
+            var solid = IfcModelBuilder.MakeExtrudedAreaSolid(_model, rectangle3, pos6, vzNegated, 70);
+            IfcModelBuilder.SetSurfaceStyle(_model, solid, 1, 0, 0);
             shape.Items.Add(solid);
 
-            var circle = IfcModelBuilder.MakeCircleProfile(m, 300);
-            var pos2 = IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, 0, 0, -120));            
-            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(m, circle, pos2, vzNegated, 65));
+            var circle = IfcModelBuilder.MakeCircleProfile(_model, 300);
+            var pos2 = IfcModelBuilder.MakeAxis2Placement3D(_model, IfcModelBuilder.MakeCartesianPoint(_model, 0, 0, -120));            
+            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(_model, circle, pos2, vzNegated, 65));
 
-            var rectangle4 = IfcModelBuilder.MakeRectangleProfile(m, 800, 1200);
-            var pos3 = IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, 0, 0, -185));            
-            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(m, rectangle4, pos3, vzNegated, 75));
+            var rectangle4 = IfcModelBuilder.MakeRectangleProfile(_model, 800, 1200);
+            var pos3 = IfcModelBuilder.MakeAxis2Placement3D(_model, IfcModelBuilder.MakeCartesianPoint(_model, 0, 0, -185));            
+            shape.Items.Add(IfcModelBuilder.MakeExtrudedAreaSolid(_model, rectangle4, pos3, vzNegated, 75));
             
             return shape;
         }
 
-        private List<IfcElementAssembly> CreateDiaphragms(IfcStore m)
+        private List<IfcElementAssembly> CreateDiaphragms()
         {
             var diaphragms = new List<IfcElementAssembly>();
             double lastDist = StartGap;
@@ -992,90 +745,75 @@ namespace ifc2mct.BridgeFactory
                 for (int i = 0; i < num; ++i)
                 {
                     lastDist += gap;
-                    diaphragms.Add(CreateDiaphragm(m, typeId, lastDist));                    
+                    diaphragms.Add(CreateDiaphragm(typeId, lastDist));                    
                 }
             }                
             return diaphragms;
         }
 
-        private IfcElementAssembly CreateDiaphragm(IfcStore m, int typeId, double distanceAlong)
+        private IfcElementAssembly CreateDiaphragm(int typeId, double distanceAlong)
         {
-            var diaphragm = m.Instances.New<IfcElementAssembly>(ea =>
+            var distance = IfcModelBuilder.MakeDistanceExpression(_model, distanceAlong);
+            var diaphragm = _model.Instances.New<IfcElementAssembly>(ea =>
             {
                 ea.Name = "横向支撑";
+                ea.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(_model, BridgeAlignmentCurve, distance);
                 ea.ObjectType = "DIAPHRAGM";
                 ea.PredefinedType = IfcElementAssemblyTypeEnum.USERDEFINED;
             });
-            var distance = IfcModelBuilder.MakeDistanceExpression(m, distanceAlong);
-            var plate = m.Instances.New<IfcPlate>(p =>
+            
+            var plate = _model.Instances.New<IfcPlate>(p =>
             {
                 p.Name = "横隔板";
-                p.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(m, BridgeAlignmentCurve, distance);
-                var solid = m.Instances.New<IfcExtrudedAreaSolid>(s =>
+                p.ObjectPlacement = IfcModelBuilder.MakeLocalPlacement(_model, null, diaphragm.ObjectPlacement);
+                var solid = _model.Instances.New<IfcExtrudedAreaSolid>(s =>
                 {
-                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(m, Origin3D, AxisX3D, AxisY3D);
-                    var outerCurve = CreateDiaphragmOuterCurve(m, distanceAlong);                    
-                    var innerCurve = CreateDiaphragmInnerCurve(m);
-                    s.SweptArea = IfcModelBuilder.MakeArbProfileWithVoids(m, outerCurve/*outerCurve*/, new List<IfcCurve>() { innerCurve });
-                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(m, 0, 0, 1);
+                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(_model, Origin3D, AxisX3D, AxisY3D);
+                    var outerCurve = CreateDiaphragmOuterCurve(distanceAlong);                    
+                    var innerCurve = CreateDiaphragmInnerCurve();
+                    s.SweptArea = IfcModelBuilder.MakeArbProfileWithVoids(_model, outerCurve/*outerCurve*/, new List<IfcCurve>() { innerCurve });
+                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(_model, 0, 0, 1);
                     s.Depth = DiaphragmTypeTable[typeId];
                 });
-                SetSurfaceStyle(m, solid, 1, 0.9333, 0, 0.15);
-                var shape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "CSG");
+                IfcModelBuilder.SetSurfaceStyle(_model, solid, 1, 0.9333, 0, 0.15);
+                var shape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "Body", "CSG");
                 shape.Items.Add(solid);
-                p.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
+                p.Representation = _model.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
             });
 
             // Cantilever web
-            var plate2 = m.Instances.New<IfcPlate>(p =>
+            var plate2 = _model.Instances.New<IfcPlate>(p =>
             {
                 p.Name = "悬挑腹板";
-                p.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(m, BridgeAlignmentCurve, distance);
-                var solid = m.Instances.New<IfcExtrudedAreaSolid>(s =>
+                p.ObjectPlacement = IfcModelBuilder.MakeLocalPlacement(_model, null, diaphragm.ObjectPlacement);
+                var solid = this._model.Instances.New<IfcExtrudedAreaSolid>(s =>
                 {
-                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(m, Origin3D, AxisX3D, AxisY3D);
-                    //var outerCurvePoints = new List<IfcCartesianPoint>()
-                    //{
-                    //    IfcModelBuilder.MakeCartesianPoint(m, -4934, 0),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, -4934, -360),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, -3100, -600),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, -3220, 0),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, -4934, 0)
-                    //};
-                    var outerCurve = CreateCantileverWebOuterCurve(m, distanceAlong, true);
+                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(_model, Origin3D, AxisX3D, AxisY3D);
+                    var outerCurve = CreateCantileverWebOuterCurve(distanceAlong, true);
                     
-                    s.SweptArea = IfcModelBuilder.MakeArbClosedProfile(m, outerCurve);
-                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(m, 0, 0, 1);
+                    s.SweptArea = IfcModelBuilder.MakeArbClosedProfile(_model, outerCurve);
+                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(_model, 0, 0, 1);
                     s.Depth = DiaphragmTypeTable[typeId];
                 });
-                SetSurfaceStyle(m, solid, 1, 0.9333, 0, 0.15);
-                var solid2 = m.Instances.New<IfcExtrudedAreaSolid>(s =>
+                IfcModelBuilder.SetSurfaceStyle(_model, solid, 1, 0.9333, 0, 0.15);
+                var solid2 = _model.Instances.New<IfcExtrudedAreaSolid>(s =>
                 {
-                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(m, Origin3D, AxisX3D, AxisY3D);
-                    //var outerCurvePoints = new List<IfcCartesianPoint>()
-                    //{
-                    //    IfcModelBuilder.MakeCartesianPoint(m, 4934, 0),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, 4934, -360),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, 3100, -600),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, 3220, 0),
-                    //    IfcModelBuilder.MakeCartesianPoint(m, 4934, 0)
-                    //};
-                    var outerCurve = CreateCantileverWebOuterCurve(m, distanceAlong, false);
-                    //var innerCurve = IfcModelBuilder.MakeCircle(m, IfcModelBuilder.MakeAxis2Placement3D(m, IfcModelBuilder.MakeCartesianPoint(m, 0, -950, 0)), 300);
-                    s.SweptArea = IfcModelBuilder.MakeArbProfileWithVoids(m, outerCurve, new List<IfcCurve>() { });
-                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(m, 0, 0, 1);
+                    s.Position = IfcModelBuilder.MakeAxis2Placement3D(_model, Origin3D, AxisX3D, AxisY3D);
+                    var outerCurve = CreateCantileverWebOuterCurve(distanceAlong, false);                    
+                    s.SweptArea = IfcModelBuilder.MakeArbProfileWithVoids(_model, outerCurve, new List<IfcCurve>() { });
+                    s.ExtrudedDirection = IfcModelBuilder.MakeDirection(_model, 0, 0, 1);
                     s.Depth = DiaphragmTypeTable[typeId];
                 });
-                SetSurfaceStyle(m, solid2, 1, 0.9333, 0, 0.15);
+                IfcModelBuilder.SetSurfaceStyle(_model, solid2, 1, 0.9333, 0, 0.15);
 
-                var shape = IfcModelBuilder.MakeShapeRepresentation(m, 3, "Body", "CSG");
+                var shape = IfcModelBuilder.MakeShapeRepresentation(_model, 3, "Body", "CSG");
                 shape.Items.Add(solid);
                 shape.Items.Add(solid2);
-                p.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
+                p.Representation = _model.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
             });
 
             // Aggregate plates and stiffeners
-            var relAggregates = m.Instances.New<IfcRelAggregates>(r =>
+            var relAggregates = _model.Instances.New<IfcRelAggregates>(r =>
             {
                 r.RelatingObject = diaphragm;
                 r.RelatedObjects.Add(plate);
@@ -1121,327 +859,90 @@ namespace ifc2mct.BridgeFactory
                 return new XbimVector3D(2 * SectionDimensions[4], SectionDimensions[1] - SectionDimensions[3], 0).Normalized();
             else
                 return new XbimVector3D(0, 1, 0);
-        }
+        }        
 
-        /// <summary>
-        /// dimensions = { B1, B2, B4, B5, H, t1, t2, tw1 }
-        /// </summary>
-        /// <param name="m"></param>
-        /// <param name="axis"></param>
-        /// <param name="start"></param>
-        /// <param name="length"></param>
-        /// <param name="dimensions"></param>
-        /// <returns></returns>
-        private IfcElementAssembly CreateSteelBoxGirder(IfcStore m, string name, IfcCurve axis, double start, double length, List<double> dimensions)
-        {
-            var dimensionNames = new List<string>() { "B1", "B2", "B4", "B5", "H", "t1", "t2", "tw1" };
-            var dimensionsMap = new Dictionary<string, double>();
-            for (int i = 0; i < dimensions.Count; ++i)
-                dimensionsMap[dimensionNames[i]] = dimensions[i];
-            
-            using (var txn = m.BeginTransaction("Create an assembly to hold all sub-elements"))
-            {
-                var girder = m.Instances.New<IfcElementAssembly>(g =>
-                {
-                    g.Name = name;
-                    g.Description = "Steel Box Girder";
-                    g.PredefinedType = IfcElementAssemblyTypeEnum.GIRDER;
-                });
-
-                // Add property set which holds section properties
-                m.Instances.New<IfcRelDefinesByProperties>(rdbp =>
-                {
-                    rdbp.RelatedObjects.Add(girder);
-                    rdbp.RelatingPropertyDefinition = IfcModelBuilder.MakePropertySet(m, "SteelBoxSectionDimensions", dimensionsMap);
-                });
-
-                // Add top flange, bottom flange and webs to girder
-                // TODO                
-                // 0 for top flange, 3 for bottom flange, 1 for left web, 2 for right web
-                var plateCodes = new List<int>() { 0, 3, 1, 2 };
-                var plates = plateCodes.Select(c => CreateSingleBoxPlate(m, axis, start, length, dimensionsMap, c)).ToList();
-
-                // Add stiffeners to be connected with flanges and webs
-                // TODO
-                // The flat stiffener has dimensions H = 190mm, B = 16mm
-                var flatStiffDims = new List<double>() { 190, 16 };
-                var topFlatStiffProfile = CreateStiffenerProfile(m, flatStiffDims, new XbimVector3D(0, -1, 0));
-                var gaps = new List<double>() { 250, 250, 250, 250, 250, 250 };           
-                var topLeftStiffners = AddStiffeners(m, plates[0], topFlatStiffProfile, gaps, dimensionsMap["B1"] + dimensionsMap["B2"] / 2);
-                topLeftStiffners.Name = "TopLeftStiffeners";
-                var topRightStiffners = AddStiffeners(m, plates[0], topFlatStiffProfile, gaps, -dimensionsMap["B2"] / 2);
-                topRightStiffners.Name = "TopRightStiffeners";
-
-                var bottomFlatStiffProfile = CreateStiffenerProfile(m, flatStiffDims, new XbimVector3D(0, 1, 0));
-                gaps = new List<double>() { 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400 };                
-                var bottomCenterStiffeners = AddStiffeners(m, plates[1], bottomFlatStiffProfile, gaps, dimensionsMap["B5"] / 2);
-                bottomCenterStiffeners.Name = "BottomCenterStiffeners";
-
-                var leftStiffProfile = CreateStiffenerProfile(m, flatStiffDims, 
-                    new XbimVector3D(-2 * dimensionsMap["H"], dimensionsMap["B2"] - dimensionsMap["B5"], 0).Normalized());
-                gaps = new List<double>() { 600, 1000 };
-                var leftWebStiffeners = AddStiffeners(m, plates[2], leftStiffProfile, gaps, 0);
-                leftWebStiffeners.Name = "LeftWebStiffeners";
-
-                var rightStiffProfile = CreateStiffenerProfile(m, flatStiffDims,
-                    new XbimVector3D(2 * dimensionsMap["H"], dimensionsMap["B2"] - dimensionsMap["B5"], 0).Normalized());
-                var rightWebStiffeners = AddStiffeners(m, plates[3], rightStiffProfile, gaps, 0);
-                rightWebStiffeners.Name = "RightWebStiffeners";
-
-                // Add property set to hold flat stiffener dimensions
-                var flatStiffDimMap = new Dictionary<string, double>() { { "H", flatStiffDims[0] }, { "B", flatStiffDims[1] } };
-                m.Instances.New<IfcRelDefinesByProperties>(rdbp =>
-                {
-                    rdbp.RelatedObjects.AddRange(new List<IfcMember>() { topLeftStiffners, topRightStiffners,
-                        bottomCenterStiffeners, leftWebStiffeners, rightWebStiffeners });
-                    rdbp.RelatingPropertyDefinition = IfcModelBuilder.MakePropertySet(m, "StiffenerDimensions", flatStiffDimMap);
-                });
-
-                // The U-shape stiffener has dimensions H = 280, B1 = 300, B2 = 170, t = 8, R = 40
-                var ushapeStiffDims = new List<double>() { 280, 300, 170, 8, 40 };
-                var topUshapeStiffProfile = CreateStiffenerProfile(m, ushapeStiffDims, new XbimVector3D(0, -1, 0));
-                gaps = new List<double>() { 500, 600, 600, 600, 600, 600, 600, 600, 600, 600 };
-                var topCenterStiffeners = AddStiffeners(m, plates[0], topUshapeStiffProfile, gaps, dimensionsMap["B2"] / 2);
-                topCenterStiffeners.Name = "TopCenterStiffeners";
-                var ushapeStiffDimNames = new List<string>() { "H", "B1", "B2", "t", "R" };
-                var ushapeStiffDimMap = new Dictionary<string, double>();
-                for (int i = 0; i < ushapeStiffDims.Count; ++i)
-                    ushapeStiffDimMap[ushapeStiffDimNames[i]] = ushapeStiffDims[i];
- 
-                // Add property set to hold U-shape stiffener dimensions
-                m.Instances.New<IfcRelDefinesByProperties>(rdbp =>
-                {
-                    rdbp.RelatedObjects.AddRange(new List<IfcMember>() { topCenterStiffeners });
-                    rdbp.RelatingPropertyDefinition = IfcModelBuilder.MakePropertySet(m, "StiffenerDimensions", ushapeStiffDimMap);
-                });
-
-                // Aggregate flanges and webs into the girder assembly
-                var relAggregates = m.Instances.New<IfcRelAggregates>(r =>
-                {
-                    r.RelatingObject = girder;
-                    r.RelatedObjects.AddRange(plates);
-                    foreach (var plate in plates)                    
-                        foreach (var connect in plate.ConnectedFrom)
-                            r.RelatedObjects.Add(connect.RelatingElement);                    
-                });                
-
-                // Add property set which holds properties 'StartDistanceAlong' and 'SegmentLength'
-                var commonPropertiesMap = new Dictionary<string, double>()
-                {
-                    {"StartDistanceAlong", start }, {"SegmentLength", length}
-                };
-                m.Instances.New<IfcRelDefinesByProperties>(rdbp =>
-                {
-                    rdbp.RelatedObjects.Add(girder);
-                    rdbp.RelatingPropertyDefinition = IfcModelBuilder.MakePropertySet(m, "GirderCommon", commonPropertiesMap);
-                });
-
-                // Set material for this girder
-                CreateMaterialForGirder(m, girder);
-
-                txn.Commit();
-                return girder;
-            }
-        }
-
-        private void CreateMaterialForGirder(IfcStore m, IfcElementAssembly girder)
+        // assign defalt material to girder
+        private void CreateMaterialForGirder(IfcElementAssembly girder)
         {
             // Create material and associates it with the girder
-            var material = m.Instances.New<IfcMaterial>(mat =>
+            var material = _model.Instances.New<IfcMaterial>(mat =>
             {
                 mat.Name = "Q345";
                 mat.Category = "Steel";
             });
-            m.Instances.New<IfcRelAssociatesMaterial>(ram =>
+            _model.Instances.New<IfcRelAssociatesMaterial>(ram =>
             {
                 ram.RelatingMaterial = material;
                 ram.RelatedObjects.Add(girder);
             });
             // Create P_set to hold material properties
-            var pset_MaterialCommon = m.Instances.New<IfcMaterialProperties>(mp =>
+            var pset_MaterialCommon = _model.Instances.New<IfcMaterialProperties>(mp =>
             {
                 mp.Name = "Pset_MaterialCommon";
                 mp.Material = material;
-                var massDensity = m.Instances.New<IfcPropertySingleValue>(p =>
+                var massDensity = _model.Instances.New<IfcPropertySingleValue>(p =>
                 {
                     p.Name = "MassDensity";
                     p.NominalValue = new IfcMassDensityMeasure(7.85e-9);
                 });
                 mp.Properties.Add(massDensity);
             });
-            var pset_MaterialMechanical = m.Instances.New<IfcMaterialProperties>(mp =>
+            var pset_MaterialMechanical = _model.Instances.New<IfcMaterialProperties>(mp =>
             {
                 mp.Name = "Pset_MaterialMechanical";
                 mp.Material = material;
                 // Add YoungModulus, PoissonRatio, ThermalExpansionCoefficient
                 // TODO
-                var youngModulus = m.Instances.New<IfcPropertySingleValue>(p =>
+                var youngModulus = _model.Instances.New<IfcPropertySingleValue>(p =>
                 {
                     p.Name = "YoungModulus";
                     p.NominalValue = new IfcModulusOfElasticityMeasure(2.06e5);
                 });
-                var poissonRatio = m.Instances.New<IfcPropertySingleValue>(p =>
+                var poissonRatio = _model.Instances.New<IfcPropertySingleValue>(p =>
                 {
                     p.Name = "PoissonRatio";
                     p.NominalValue = new IfcPositiveRatioMeasure(0.3);
                 });
-                var thermalExpansionCoefficient = m.Instances.New<IfcPropertySingleValue>(p =>
+                var thermalExpansionCoefficient = _model.Instances.New<IfcPropertySingleValue>(p =>
                 {
                     p.Name = "ThermalExpansionCoefficient";
                     p.NominalValue = new IfcThermalExpansionCoefficientMeasure(1.2e-5);
                 });
                 mp.Properties.AddRange(new List<IfcPropertySingleValue>() { youngModulus, poissonRatio, thermalExpansionCoefficient });
             });
-        }
-
-        // Symmetric box section
-        // part = 0 => top flange, part = 1 => left web, part = 2 => right web, part = 3 => bottom flange
-        private IfcPlate CreateSingleBoxPlate(IfcStore m, IfcCurve axis, double start, double length, 
-            Dictionary<string, double> dimensions, int plateCode)
-        {            
-            double x1 = 0, y1 = 0, x2 = 0, y2 = 0, t = 0, offsetLateral = 0, offsetVertical = 0;
-            string name = "";
-            switch (plateCode)
-            {
-                case 0:
-                    x1 = dimensions["B1"] + dimensions["B2"] / 2;
-                    y1 = dimensions["t1"] / 2;
-                    x2 = -x1; y2 = y1; t = dimensions["t1"];
-                    name = "TopFlange"; break;
-                case 3:
-                    x1 = dimensions["B4"] + dimensions["B5"] / 2;
-                    y1 = -dimensions["t2"] / 2;
-                    x2 = -x1; y2 = y1; t = dimensions["t2"];
-                    offsetVertical = -dimensions["H"];
-                    name = "BottomFlange"; break;
-                case 1:
-                    x1 = 0; y1 = 0; 
-                    x2 = (dimensions["B5"] - dimensions["B2"]) / 2; y2 = -dimensions["H"];
-                    t = dimensions["tw1"]; offsetLateral = dimensions["B2"] / 2;
-                    name = "LeftWeb"; break;
-                case 2:
-                    x1 = 0; y1 = 0;
-                    x2 = (dimensions["B2"] - dimensions["B5"]) / 2; y2 = -dimensions["H"];
-                    t = dimensions["tw1"]; offsetLateral = -dimensions["B5"] / 2;
-                    name = "RightWeb"; break;
-                default: break;
-            }
-            var solid = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
-            {
-                s.Directrix = axis;                
-                var p1 = IfcModelBuilder.MakeCartesianPoint(m, x1, y1);
-                var p2 = IfcModelBuilder.MakeCartesianPoint(m, x2, y2);
-                var line = IfcModelBuilder.MakePolyline(m, new List<IfcCartesianPoint>() { p1, p2 });
-                var profile = IfcModelBuilder.MakeCenterLineProfile(m, line, t);
-                s.CrossSections.AddRange(new List<IfcProfileDef>() { profile, profile });
-                var pos1 = IfcModelBuilder.MakeDistanceExpression(m, start, offsetLateral, offsetVertical);
-                var pos2 = IfcModelBuilder.MakeDistanceExpression(m, start + length, offsetLateral, offsetVertical);
-                s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
-            });
-            var shape = m.Instances.New<IfcShapeRepresentation>(s =>
-            {
-                s.ContextOfItems = m.Instances.OfType<IfcGeometricRepresentationContext>()
-                    .Where(c => c.CoordinateSpaceDimension == 3)
-                    .FirstOrDefault();
-                s.RepresentationIdentifier = "Body";
-                s.RepresentationType = "AdvancedSweptSolid";
-                s.Items.Add(solid);
-            });
-            var plate = m.Instances.New<IfcPlate>(p =>
-            {
-                p.Name = name;
-                p.Description = (plateCode == 0 || plateCode == 3) ? "FLANGE_PLATE" : "WEB_PLATE";
-                p.ObjectPlacement = m.Instances.New<IfcLinearPlacement>(lp =>
-                {
-                    lp.PlacementRelTo = axis;
-                    lp.Distance = m.Instances.New<IfcDistanceExpression>(d =>
-                    {
-                        d.DistanceAlong = start;
-                        d.OffsetVertical = offsetVertical;
-                        d.OffsetLateral = offsetLateral;
-                    });
-                });
-                p.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shape));
-                //p.PredefinedType = (part == 0 || part == 1) ? IfcPlateTypeEnum.FLANGE_PLATE : IfcPlateTypeEnum.WEB_PLATE; // IFC4x2 feature
-            });
-            return plate;
         }        
 
-        // Add stiffeners to flanges and webs
-        private IfcMember AddStiffeners(IfcStore m, IfcPlate parent, IfcProfileDef stiffProfile, List<double> gaps, double refPos)
-        {
-            int stiffNum = gaps.Count;
-            IfcSectionedSolidHorizontal parentGeometry = (IfcSectionedSolidHorizontal)parent.Representation.Representations.FirstOrDefault().Items.FirstOrDefault();
-            double start = parentGeometry.CrossSectionPositions.FirstOrDefault().DistanceAlong;
-            double end = parentGeometry.CrossSectionPositions.LastOrDefault().DistanceAlong;
-            var stiffShape = m.Instances.New<IfcShapeRepresentation>(s =>
-            {
-                s.ContextOfItems = m.Instances.OfType<IfcGeometricRepresentationContext>()
-                    .Where(c => c.CoordinateSpaceDimension == 3)
-                    .FirstOrDefault();
-                s.RepresentationIdentifier = "Body";
-                s.RepresentationType = "AdvancedSweptSolid";
-            });
-            for (int i = 0; i < stiffNum; ++i)
-            {
-                var stiff = m.Instances.New<IfcSectionedSolidHorizontal>(s =>
-                {
-                    s.Directrix = parentGeometry.Directrix;                  
-                    s.CrossSections.AddRange(new List<IfcProfileDef>() { stiffProfile, stiffProfile });
-                    refPos -= gaps[i];
-                    var pos1 = IfcModelBuilder.MakeDistanceExpression(m, start, refPos, 0);
-                    var pos2 = IfcModelBuilder.MakeDistanceExpression(m, end, refPos, 0);
-                    s.CrossSectionPositions.AddRange(new List<IfcDistanceExpression>() { pos1, pos2 });
-                });
-                stiffShape.Items.Add(stiff);
-            }
-            var stiffenerGroup = m.Instances.New<IfcMember>(sg =>
-            {                
-                sg.Description = "STIFFENING_RIB";
-                //me.PredefinedType = IfcMemberTypeEnum.STIFFENING_RIB; // IFC4x2 features
-                sg.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(stiffShape));
-            });
-            // Connect top flange and the stiffeners on it
-            m.Instances.New<IfcRelConnectsElements>(rce =>
-            {
-                rce.RelatedElement = parent;
-                rce.RelatingElement = stiffenerGroup;
-            });
-
-            return stiffenerGroup;
-        }
-
-        private IfcCenterLineProfileDef CreateStiffenerProfile(IfcStore m, List<double> stiffDimensions, XbimVector3D vec)
+        private IfcCenterLineProfileDef CreateStiffenerProfile(List<double> stiffDimensions, XbimVector3D vec)
         {
             switch (stiffDimensions.Count)
             {
-                case 2: return CreateFlatStiffenerProfile(m, stiffDimensions, vec); 
-                case 4: return CreateTShapeStiffenerProfile(m, stiffDimensions, vec); 
-                case 5: return CreateUShapeStiffenerProfile(m, stiffDimensions, vec);
+                case 2: return CreateFlatStiffenerProfile(stiffDimensions, vec); 
+                case 4: return CreateTShapeStiffenerProfile(stiffDimensions, vec); 
+                case 5: return CreateUShapeStiffenerProfile(stiffDimensions, vec);
                 default: throw new NotImplementedException("Other stiffener types not supported for now.");
             }
         }
 
-        private IfcCenterLineProfileDef CreateFlatStiffenerProfile(IfcStore m, List<double> stiffDimensions, XbimVector3D vec)
+        private IfcCenterLineProfileDef CreateFlatStiffenerProfile(List<double> stiffDimensions, XbimVector3D vec)
         {
             vec = vec.Normalized();
-            var p1 = IfcModelBuilder.MakeCartesianPoint(m, 0, 0);
-            var p2 = IfcModelBuilder.MakeCartesianPoint(m, stiffDimensions[0] * vec.X, stiffDimensions[0] * vec.Y);
-            var line = IfcModelBuilder.MakePolyline(m, new List<IfcCartesianPoint>() { p1, p2 });
-            return IfcModelBuilder.MakeCenterLineProfile(m, line, stiffDimensions[1]);            
+            var p1 = IfcModelBuilder.MakeCartesianPoint(_model, 0, 0);
+            var p2 = IfcModelBuilder.MakeCartesianPoint(_model, stiffDimensions[0] * vec.X, stiffDimensions[0] * vec.Y);
+            var line = IfcModelBuilder.MakePolyline(_model, new List<IfcCartesianPoint>() { p1, p2 });
+            return IfcModelBuilder.MakeCenterLineProfile(_model, line, stiffDimensions[1]);            
         }
 
-        private IfcCenterLineProfileDef CreateTShapeStiffenerProfile(IfcStore m, List<double> stiffDimensions, XbimVector3D vec)
+        private IfcCenterLineProfileDef CreateTShapeStiffenerProfile(List<double> stiffDimensions, XbimVector3D vec)
         {
             throw new NotImplementedException("T-shape stiffener not supported for now.");
         }
 
-        private IfcCenterLineProfileDef CreateUShapeStiffenerProfile(IfcStore m, List<double> stiffDimensions, XbimVector3D vec)
+        private IfcCenterLineProfileDef CreateUShapeStiffenerProfile(List<double> stiffDimensions, XbimVector3D vec)
         {
             double H = stiffDimensions[0], B1 = stiffDimensions[1], B2 = stiffDimensions[2], 
                 t = stiffDimensions[3], R = stiffDimensions[4];
 
-            var compositeCurve = m.Instances.New<IfcCompositeCurve>(cc =>
+            var compositeCurve = _model.Instances.New<IfcCompositeCurve>(cc =>
             {
                 // Preparation
                 var p1 = new XbimPoint3D(B1 / 2, 0, 0);
@@ -1460,111 +961,88 @@ namespace ifc2mct.BridgeFactory
                 var p32 = new XbimPoint3D(-p22.X, p22.Y, p22.Z);
 
                 // Draw U-shape stiffener centerline
-                var line = IfcModelBuilder.MakePolyline(m, p1, p21);
-                var seg = IfcModelBuilder.MakeCompositeCurveSegment(m, line);
+                var line = IfcModelBuilder.MakePolyline(_model, p1, p21);
+                var seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, line);
                 cc.Segments.Add(seg);
 
-                var center = IfcModelBuilder.MakeAxis2Placement2D(m, p01);
-                var circle = IfcModelBuilder.MakeCircle(m, center, R);
-                var arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p21, p22);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, arc);
+                var center = IfcModelBuilder.MakeAxis2Placement2D(_model, p01);
+                var circle = IfcModelBuilder.MakeCircle(_model, center, R);
+                var arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p21, p22);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, arc);
                 cc.Segments.Add(seg);
 
-                line = IfcModelBuilder.MakePolyline(m, p22, p32);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, line);
+                line = IfcModelBuilder.MakePolyline(_model, p22, p32);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, line);
                 cc.Segments.Add(seg);
 
-                center = IfcModelBuilder.MakeAxis2Placement2D(m, p02);
-                circle = IfcModelBuilder.MakeCircle(m, center, R);
-                arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p32, p31);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, arc);
+                center = IfcModelBuilder.MakeAxis2Placement2D(_model, p02);
+                circle = IfcModelBuilder.MakeCircle(_model, center, R);
+                arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p32, p31);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, arc);
                 cc.Segments.Add(seg);
 
-                line = IfcModelBuilder.MakePolyline(m, p31, p4);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, line, IfcTransitionCode.DISCONTINUOUS);
+                line = IfcModelBuilder.MakePolyline(_model, p31, p4);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, line, IfcTransitionCode.DISCONTINUOUS);
                 cc.Segments.Add(seg);
             });
-            return IfcModelBuilder.MakeCenterLineProfile(m, compositeCurve, t);
-        }
+            return IfcModelBuilder.MakeCenterLineProfile(_model, compositeCurve, t);
+        }   
 
-        // set color for geometry item
-        private void SetSurfaceStyle(IfcStore m, IfcGeometricRepresentationItem geomItem, double red, double green, double blue, double transparency = 0)
+        private IfcCompositeCurve CreateDiaphragmInnerCurve()
         {
-            var styledItem = m.Instances.New<IfcStyledItem>(i =>
+            var compCurve = _model.Instances.New<IfcCompositeCurve>(cc =>
             {
-                i.Item = geomItem;
-                i.Styles.Add(m.Instances.New<IfcSurfaceStyle>(s =>
-                {
-                    s.Side = IfcSurfaceSide.POSITIVE;
-                    s.Styles.Add(m.Instances.New<IfcSurfaceStyleRendering>(r =>
-                    {
-                        r.SurfaceColour = m.Instances.New<IfcColourRgb>(c =>
-                        {
-                            c.Red = red;
-                            c.Green = green;
-                            c.Blue = blue;
-                        });
-                        r.Transparency = transparency;
-                    }));
-                }));
-            });
-        }      
-
-        private IfcCompositeCurve CreateDiaphragmInnerCurve(IfcStore m)
-        {
-            var compCurve = m.Instances.New<IfcCompositeCurve>(cc =>
-            {
-                var center = IfcModelBuilder.MakeCartesianPoint(m, 0, -950, 0);
-                var pos = IfcModelBuilder.MakeAxis2Placement2D(m, center);
-                var circle = IfcModelBuilder.MakeCircle(m, pos, 300);
-                var halfCircle = IfcModelBuilder.MakeTrimmedCurve(m, circle, Math.PI, 0);
-                var seg = IfcModelBuilder.MakeCompositeCurveSegment(m, halfCircle);
+                var center = IfcModelBuilder.MakeCartesianPoint(_model, 0, -950, 0);
+                var pos = IfcModelBuilder.MakeAxis2Placement2D(_model, center);
+                var circle = IfcModelBuilder.MakeCircle(_model, pos, 300);
+                var halfCircle = IfcModelBuilder.MakeTrimmedCurve(_model, circle, Math.PI, 0);
+                var seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, halfCircle);
                 cc.Segments.Add(seg);
                 var pts = new List<IfcCartesianPoint>()
                 {
-                    IfcModelBuilder.MakeCartesianPoint(m, 300, -950),
-                    IfcModelBuilder.MakeCartesianPoint(m, 300, -1200)
+                    IfcModelBuilder.MakeCartesianPoint(_model, 300, -950),
+                    IfcModelBuilder.MakeCartesianPoint(_model, 300, -1200)
                 };
-                var poly = IfcModelBuilder.MakePolyline(m, pts);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                var poly = IfcModelBuilder.MakePolyline(_model, pts);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 cc.Segments.Add(seg);
 
                 pts = new List<IfcCartesianPoint>()
                 {
-                    IfcModelBuilder.MakeCartesianPoint(m, -300, -950),
-                    IfcModelBuilder.MakeCartesianPoint(m, -300, -1200)
+                    IfcModelBuilder.MakeCartesianPoint(_model, -300, -950),
+                    IfcModelBuilder.MakeCartesianPoint(_model, -300, -1200)
                 };
-                poly = IfcModelBuilder.MakePolyline(m, pts);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 cc.Segments.Add(seg);
 
-                center = IfcModelBuilder.MakeCartesianPoint(m, 0, -1200, 0);
-                pos = IfcModelBuilder.MakeAxis2Placement2D(m, center);
-                circle = IfcModelBuilder.MakeCircle(m, pos, 300);
-                halfCircle = IfcModelBuilder.MakeTrimmedCurve(m, circle, 0, Math.PI);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, halfCircle);
+                center = IfcModelBuilder.MakeCartesianPoint(_model, 0, -1200, 0);
+                pos = IfcModelBuilder.MakeAxis2Placement2D(_model, center);
+                circle = IfcModelBuilder.MakeCircle(_model, pos, 300);
+                halfCircle = IfcModelBuilder.MakeTrimmedCurve(_model, circle, 0, Math.PI);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, halfCircle);
                 cc.Segments.Add(seg);
             });            
 
             return compCurve;
         }
 
-        private IfcCompositeCurve CreateDiaphragmOuterCurve(IfcStore m, double distanceAlong)
+        private IfcCompositeCurve CreateDiaphragmOuterCurve(double distanceAlong)
         {
             double B1 = SectionDimensions[0], B2 = SectionDimensions[1], B3 = SectionDimensions[2],
                 B4 = SectionDimensions[3], H = SectionDimensions[4];
-            return m.Instances.New<IfcCompositeCurve>(cc =>
+            return _model.Instances.New<IfcCompositeCurve>(cc =>
             {
                 var pts = new List<IfcCartesianPoint>()
                 {
-                    IfcModelBuilder.MakeCartesianPoint(m, -B4 / 2, -H),
-                    IfcModelBuilder.MakeCartesianPoint(m, -B2 / 2, 0)
+                    IfcModelBuilder.MakeCartesianPoint(_model, -B4 / 2, -H),
+                    IfcModelBuilder.MakeCartesianPoint(_model, -B2 / 2, 0)
                 };
-                var poly = IfcModelBuilder.MakePolyline(m, pts);
-                var seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                var poly = IfcModelBuilder.MakePolyline(_model, pts);
+                var seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 cc.Segments.Add(seg);
                                 
-                var list = StiffenerLists[0].Where(l => 
+                var list = StiffenerLists[0].Where((List<(double distanceAlong, int typeId, int layoutId)> l) =>
                     StiffenerTypeTable[l[0].typeId].Count == 5)
                     .FirstOrDefault(); // Top flange U-shape stiffener list
                 var pt = new XbimPoint3D(-B2 / 2, 0, 0);
@@ -1592,7 +1070,7 @@ namespace ifc2mct.BridgeFactory
 
                                 pts = new List<IfcCartesianPoint>()
                                 {
-                                    IfcModelBuilder.MakeCartesianPoint(m, pt)
+                                    IfcModelBuilder.MakeCartesianPoint(_model, pt)
                                 };
                                 if (isFirst)
                                 {
@@ -1603,42 +1081,42 @@ namespace ifc2mct.BridgeFactory
                                 {
                                     pt = pt + dir * (gap - b1);
                                 }
-                                pts.Add(IfcModelBuilder.MakeCartesianPoint(m, pt));
-                                poly = IfcModelBuilder.MakePolyline(m, pts);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                                pts.Add(IfcModelBuilder.MakeCartesianPoint(_model, pt));
+                                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                                 cc.Segments.Add(seg);
-                                AddUShapeHole(m, ref cc, ref pt, h, b1, b2);                                
+                                AddUShapeHole(ref cc, ref pt, h, b1, b2);                                
                             }
                         }
                         break;
                     }
                     pts = new List<IfcCartesianPoint>()
                     {
-                        IfcModelBuilder.MakeCartesianPoint(m, pt),
-                        IfcModelBuilder.MakeCartesianPoint(m, B2 / 2, 0)
+                        IfcModelBuilder.MakeCartesianPoint(_model, pt),
+                        IfcModelBuilder.MakeCartesianPoint(_model, B2 / 2, 0)
                     };
-                    poly = IfcModelBuilder.MakePolyline(m, pts);
-                    seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                    poly = IfcModelBuilder.MakePolyline(_model, pts);
+                    seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 }
                 else
                 {
                     pts = new List<IfcCartesianPoint>()
                     {
-                        IfcModelBuilder.MakeCartesianPoint(m, -B2 / 2, 0),
-                        IfcModelBuilder.MakeCartesianPoint(m, B2 / 2, 0)
+                        IfcModelBuilder.MakeCartesianPoint(_model, -B2 / 2, 0),
+                        IfcModelBuilder.MakeCartesianPoint(_model, B2 / 2, 0)
                     };
-                    poly = IfcModelBuilder.MakePolyline(m, pts);
-                    seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                    poly = IfcModelBuilder.MakePolyline(_model, pts);
+                    seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 }
                 cc.Segments.Add(seg);
 
                 pts = new List<IfcCartesianPoint>()
                 {
-                    IfcModelBuilder.MakeCartesianPoint(m, B2 / 2, 0),
-                    IfcModelBuilder.MakeCartesianPoint(m, B4 / 2, -H)
+                    IfcModelBuilder.MakeCartesianPoint(_model, B2 / 2, 0),
+                    IfcModelBuilder.MakeCartesianPoint(_model, B4 / 2, -H)
                 };
-                poly = IfcModelBuilder.MakePolyline(m, pts);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 cc.Segments.Add(seg);
 
                 pt = new XbimPoint3D(B4 / 2, -H, 0);
@@ -1660,7 +1138,7 @@ namespace ifc2mct.BridgeFactory
                             {                                                                
                                 pts = new List<IfcCartesianPoint>
                                 {
-                                    IfcModelBuilder.MakeCartesianPoint(m, pt)
+                                    IfcModelBuilder.MakeCartesianPoint(_model, pt)
                                 };
                                 if (isFirst)
                                 {
@@ -1669,48 +1147,48 @@ namespace ifc2mct.BridgeFactory
                                 }                                        
                                 else
                                     pt = pt + dir * (gap - 2 * R);
-                                pts.Add(IfcModelBuilder.MakeCartesianPoint(m, pt));
-                                poly = IfcModelBuilder.MakePolyline(m, pts);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                                pts.Add(IfcModelBuilder.MakeCartesianPoint(_model, pt));
+                                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                                 cc.Segments.Add(seg);
                                 
                                 pt = pt + dir * R;
-                                var pos = IfcModelBuilder.MakeAxis2Placement2D(m, pt);
-                                var circle = IfcModelBuilder.MakeCircle(m, pos, R);
-                                var quater = IfcModelBuilder.MakeTrimmedCurve(m, circle, Math.PI / 2, 0);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, quater);
+                                var pos = IfcModelBuilder.MakeAxis2Placement2D(_model, pt);
+                                var circle = IfcModelBuilder.MakeCircle(_model, pos, R);
+                                var quater = IfcModelBuilder.MakeTrimmedCurve(_model, circle, Math.PI / 2, 0);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, quater);
                                 cc.Segments.Add(seg);
                                                                
                                 dir = new XbimVector3D(0, 1, 0);
                                 pt = pt + dir * R;
                                 pts = new List<IfcCartesianPoint>
                                 {
-                                    IfcModelBuilder.MakeCartesianPoint(m, pt)
+                                    IfcModelBuilder.MakeCartesianPoint(_model, pt)
                                 };
                                 pt = pt + dir * (h - 2 * R);
-                                pts.Add(IfcModelBuilder.MakeCartesianPoint(m, pt));
-                                poly = IfcModelBuilder.MakePolyline(m, pts);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                                pts.Add(IfcModelBuilder.MakeCartesianPoint(_model, pt));
+                                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                                 cc.Segments.Add(seg);
                                 
                                 pt = pt + dir * R;
-                                pos = IfcModelBuilder.MakeAxis2Placement2D(m, pt);
-                                circle = IfcModelBuilder.MakeCircle(m, pos, R);
-                                quater = IfcModelBuilder.MakeTrimmedCurve(m, circle, Math.PI, Math.PI * 1.5);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, quater);
+                                pos = IfcModelBuilder.MakeAxis2Placement2D(_model, pt);
+                                circle = IfcModelBuilder.MakeCircle(_model, pos, R);
+                                quater = IfcModelBuilder.MakeTrimmedCurve(_model, circle, Math.PI, Math.PI * 1.5);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, quater);
                                 cc.Segments.Add(seg);
                                 
                                 dir = new XbimVector3D(-1, 0, 0);
                                 pt = pt + dir * R;
                                 pts = new List<IfcCartesianPoint>
                                 {
-                                    IfcModelBuilder.MakeCartesianPoint(m, pt)
+                                    IfcModelBuilder.MakeCartesianPoint(_model, pt)
                                 };
                                 dir = new XbimVector3D(0, -1, 0);
                                 pt = pt + dir * h;
-                                pts.Add(IfcModelBuilder.MakeCartesianPoint(m, pt));
-                                poly = IfcModelBuilder.MakePolyline(m, pts);
-                                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                                pts.Add(IfcModelBuilder.MakeCartesianPoint(_model, pt));
+                                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                                 cc.Segments.Add(seg);
                                 dir = new XbimVector3D(-1, 0, 0);
                             }
@@ -1720,18 +1198,18 @@ namespace ifc2mct.BridgeFactory
                 }
                 pts = new List<IfcCartesianPoint>()
                 {
-                    IfcModelBuilder.MakeCartesianPoint(m, pt),
-                    IfcModelBuilder.MakeCartesianPoint(m, -2775, -1968)
+                    IfcModelBuilder.MakeCartesianPoint(_model, pt),
+                    IfcModelBuilder.MakeCartesianPoint(_model, -2775, -1968)
                 };
-                poly = IfcModelBuilder.MakePolyline(m, pts);
-                seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+                poly = IfcModelBuilder.MakePolyline(_model, pts);
+                seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
                 cc.Segments.Add(seg);
             });
         }
 
-        private IfcCompositeCurve CreateCantileverWebOuterCurve(IfcStore m, double distanceAlong, bool isLeft)
+        private IfcCompositeCurve CreateCantileverWebOuterCurve(double distanceAlong, bool isLeft)
         {
-            var cc = m.Instances.New<IfcCompositeCurve>();
+            var cc = this._model.Instances.New<IfcCompositeCurve>();
             // Preparation
             double B1 = SectionDimensions[0], B2 = SectionDimensions[1], B3 = SectionDimensions[2],
                 B4 = SectionDimensions[3], H = SectionDimensions[4];            
@@ -1751,38 +1229,38 @@ namespace ifc2mct.BridgeFactory
             var p82 = p81 + p2p1 * 86;
 
             // Draw shape
-            var poly = IfcModelBuilder.MakePolyline(m, new List<XbimPoint3D>() { p82, p1, p4, p3, p2, p51 });
-            var seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+            var poly = IfcModelBuilder.MakePolyline(_model, new List<XbimPoint3D>() { p82, p1, p4, p3, p2, p51 });
+            var seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
             cc.Segments.Add(seg);
-            poly = IfcModelBuilder.MakePolyline(m, p52, p61);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+            poly = IfcModelBuilder.MakePolyline(_model, p52, p61);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
             cc.Segments.Add(seg);
-            poly = IfcModelBuilder.MakePolyline(m, p62, p71);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+            poly = IfcModelBuilder.MakePolyline(_model, p62, p71);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
             cc.Segments.Add(seg);
-            poly = IfcModelBuilder.MakePolyline(m, p72, p81);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, poly);
+            poly = IfcModelBuilder.MakePolyline(_model, p72, p81);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, poly);
             cc.Segments.Add(seg);
             if (isLeft)
             {
-                AddFlatStiffenerHole(m, ref cc, p71);
-                AddFlatStiffenerHole(m, ref cc, p81);
-                AddUShapeHole(m, ref cc, ref p51, 280, 300, 170);
-                AddUShapeHole(m, ref cc, ref p61, 280, 300, 170);
+                AddFlatStiffenerHole(ref cc, p71);
+                AddFlatStiffenerHole(ref cc, p81);
+                AddUShapeHole(ref cc, ref p51, 280, 300, 170);
+                AddUShapeHole(ref cc, ref p61, 280, 300, 170);
             }
             else
             {
-                AddFlatStiffenerHole(m, ref cc, p72);
-                AddFlatStiffenerHole(m, ref cc, p82);
-                AddUShapeHole(m, ref cc, ref p52, 280, 300, 170);
-                AddUShapeHole(m, ref cc, ref p62, 280, 300, 170);
+                AddFlatStiffenerHole(ref cc, p72);
+                AddFlatStiffenerHole(ref cc, p82);
+                AddUShapeHole(ref cc, ref p52, 280, 300, 170);
+                AddUShapeHole(ref cc, ref p62, 280, 300, 170);
             }
 
             return cc;
         }
 
         // Add Flat stiffener hole
-        private void AddFlatStiffenerHole(IfcStore m, ref IfcCompositeCurve usingCurve, XbimPoint3D start)
+        private void AddFlatStiffenerHole(ref IfcCompositeCurve usingCurve, XbimPoint3D start)
         {
             // Preparation
             const double R = 35, H = 190, t = 16;
@@ -1799,35 +1277,35 @@ namespace ifc2mct.BridgeFactory
             var p7 = p1 + p1p8 * (t + 2 * R);
 
             // Draw
-            var center = IfcModelBuilder.MakeAxis2Placement2D(m, p8);
-            var circle = IfcModelBuilder.MakeCircle(m, center, R);
-            var arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p2, p1);
-            var seg = IfcModelBuilder.MakeCompositeCurveSegment(m, arc);
+            var center = IfcModelBuilder.MakeAxis2Placement2D(_model, p8);
+            var circle = IfcModelBuilder.MakeCircle(_model, center, R);
+            var arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p2, p1);
+            var seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, arc);
             usingCurve.Segments.Add(seg);
 
-            var line = IfcModelBuilder.MakePolyline(m, p2, p3);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, line);
+            var line = IfcModelBuilder.MakePolyline(_model, p2, p3);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, line);
             usingCurve.Segments.Add(seg);
 
-            center = IfcModelBuilder.MakeAxis2Placement2D(m, p4);
-            circle = IfcModelBuilder.MakeCircle(m, center, R);
-            arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p5, p3);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, arc);
+            center = IfcModelBuilder.MakeAxis2Placement2D(_model, p4);
+            circle = IfcModelBuilder.MakeCircle(_model, center, R);
+            arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p5, p3);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, arc);
             usingCurve.Segments.Add(seg);
 
-            line = IfcModelBuilder.MakePolyline(m, p5, p6);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, line);
+            line = IfcModelBuilder.MakePolyline(_model, p5, p6);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, line);
             usingCurve.Segments.Add(seg);
 
-            center = IfcModelBuilder.MakeAxis2Placement2D(m, p9);
-            circle = IfcModelBuilder.MakeCircle(m, center, R);
-            arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p7, p6);
-            seg = IfcModelBuilder.MakeCompositeCurveSegment(m, arc);
+            center = IfcModelBuilder.MakeAxis2Placement2D(_model, p9);
+            circle = IfcModelBuilder.MakeCircle(_model, center, R);
+            arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p7, p6);
+            seg = IfcModelBuilder.MakeCompositeCurveSegment(_model, arc);
             usingCurve.Segments.Add(seg);
         }
 
         // Add U-shape hole which is composed by a groupt of composite curve segments
-        private void AddUShapeHole(IfcStore m, ref IfcCompositeCurve usingCurve, ref XbimPoint3D ptOut, double h, double b1, double b2)
+        private void AddUShapeHole(ref IfcCompositeCurve usingCurve, ref XbimPoint3D ptOut, double h, double b1, double b2)
         {
             // Preparation
             var p1 = ptOut;
@@ -1860,40 +1338,40 @@ namespace ifc2mct.BridgeFactory
             var p10 = p1 + dir * b1;
 
             // Draw U-shape hole
-            var poly = IfcModelBuilder.MakePolyline(m, new List<XbimPoint3D>() { p1, p2, p3 });
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, poly));
+            var poly = IfcModelBuilder.MakePolyline(_model, new List<XbimPoint3D>() { p1, p2, p3 });
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, poly));
 
-            var center = IfcModelBuilder.MakeAxis2Placement2D(m, p34);
-            var circle = IfcModelBuilder.MakeCircle(m, center, R1);
-            var arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p4, p3);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, arc));
+            var center = IfcModelBuilder.MakeAxis2Placement2D(_model, p34);
+            var circle = IfcModelBuilder.MakeCircle(_model, center, R1);
+            var arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p4, p3);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, arc));
 
-            poly = IfcModelBuilder.MakePolyline(m, p4, p51);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, poly));
+            poly = IfcModelBuilder.MakePolyline(_model, p4, p51);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, poly));
 
-            center = IfcModelBuilder.MakeAxis2Placement2D(m, p01);
-            circle = IfcModelBuilder.MakeCircle(m, center, R2);
-            arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p52, p51);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, arc));
+            center = IfcModelBuilder.MakeAxis2Placement2D(_model, p01);
+            circle = IfcModelBuilder.MakeCircle(_model, center, R2);
+            arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p52, p51);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, arc));
 
-            poly = IfcModelBuilder.MakePolyline(m, p52, p62);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, poly));
+            poly = IfcModelBuilder.MakePolyline(_model, p52, p62);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, poly));
 
-            center = IfcModelBuilder.MakeAxis2Placement2D(m, p02);
-            circle = IfcModelBuilder.MakeCircle(m, center, R2);
-            arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p61, p62);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, arc));
+            center = IfcModelBuilder.MakeAxis2Placement2D(_model, p02);
+            circle = IfcModelBuilder.MakeCircle(_model, center, R2);
+            arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p61, p62);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, arc));
 
-            poly = IfcModelBuilder.MakePolyline(m, p61, p7);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, poly));
+            poly = IfcModelBuilder.MakePolyline(_model, p61, p7);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, poly));
 
-            center = IfcModelBuilder.MakeAxis2Placement2D(m, p78);
-            circle = IfcModelBuilder.MakeCircle(m, center, R1);
-            arc = IfcModelBuilder.MakeTrimmedCurve(m, circle, p8, p7);
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, arc));
+            center = IfcModelBuilder.MakeAxis2Placement2D(_model, p78);
+            circle = IfcModelBuilder.MakeCircle(_model, center, R1);
+            arc = IfcModelBuilder.MakeTrimmedCurve(_model, circle, p8, p7);
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, arc));
 
-            poly = IfcModelBuilder.MakePolyline(m, new List<XbimPoint3D>() { p8, p9, p10 });
-            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(m, poly));
+            poly = IfcModelBuilder.MakePolyline(_model, new List<XbimPoint3D>() { p8, p9, p10 });
+            usingCurve.Segments.Add(IfcModelBuilder.MakeCompositeCurveSegment(_model, poly));
 
             // Set ptOut
             ptOut = p10;

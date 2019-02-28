@@ -109,6 +109,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AlignmentBuilder.cs" />
     <Compile Include="BridgeBuilder.cs" />
     <Compile Include="GeometryEngine.cs" />
     <Compile Include="IfcModelBuilder.cs" />

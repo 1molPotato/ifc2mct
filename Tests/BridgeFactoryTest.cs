@@ -1,10 +1,13 @@
 ﻿using ifc2mct.BridgeFactory;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.IO;
+using System.Linq;
 using System.Collections.Generic;
 using Xbim.Common.Geometry;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
+using Xbim.Ifc4.ProductExtension;
 
 namespace ifc2mct.Tests
 {
@@ -14,6 +17,7 @@ namespace ifc2mct.Tests
     [TestClass]
     public class BridgeBuilderTest
     {
+        const string INPATH = "../../TestFiles/alignment.ifc";
         public BridgeBuilderTest()
         {
             //
@@ -61,18 +65,20 @@ namespace ifc2mct.Tests
         //
         #endregion
 
-        [TestMethod]
-        public void BuildModelTest()
-        {
-            const string path = "../../TestFiles/test.ifc";
-            var builder = new BridgeBuilder(path);
-            builder.Run();
-        }
+        //[TestMethod]
+        //public void BuildModelTest()
+        //{
+        //    const string PATH = "../../TestFiles/test.ifc";
+        //    var builder = new BridgeBuilder(PATH);
+        //    builder.Run();
+        //    Assert.IsTrue(File.Exists(PATH));
+        //}
 
         [TestMethod]
         public void BuildBridgeTest()
         {
-            const string PATH = "../../TestFiles/bridgeTest.ifc";
+            //const string INPATH = "../../TestFiles/alignment.ifc";
+            const string OUTPATH = "../../TestFiles/completed-bridge.ifc";
             // bridge data
             // overall
             const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
@@ -107,7 +113,7 @@ namespace ifc2mct.Tests
                 { (0, new List<(double, int, int)>() { (72262, 5, 2) }) }, // stiffeners on top flange
                 { (1, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on left web
                 { (2, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on right web
-                { (3, new List<(double, int, int)>() { (23000, 2, 3), (44000, 3, 3), (72262, 2, 3) }) }, // stiffeners on bottom flange
+                { (3, new List<(double, int, int)>() { (28000, 2, 3), (44000, 3, 3), (72262, 2, 3) }) }, // stiffeners on bottom flange
                 { (0, new List<(double, int, int)>() { (72262, 6, 5) }) } // edge plate on top flange
             };
             // bearings
@@ -115,7 +121,7 @@ namespace ifc2mct.Tests
             var bearingTypeTable = new Dictionary<int, (bool fixedLateral, bool fixedLongitudinal, bool fixedVertical)>()
             {
                 {1, (true, true, false) }, // dual-fixed (non-guided)
-                {2, (false, true, true) }, // longitudinal-fixed (tranversely guided)
+                {2, (false, true, false) }, // longitudinal-fixed (tranversely guided)
                 {3, (true, false, true) }, // lateral-fixed (longitudinally guided), pull-resistant
                 {4, (false, false, true) } // non-fixed (dual-guided), pull-resistant
             };
@@ -124,8 +130,7 @@ namespace ifc2mct.Tests
                 (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71752, 1400, 3), (71752, -1900, 4)
             };
 
-            // cross frames
-            // TODO
+            // cross bracing
             var diaphragmTypeTable = new Dictionary<int, double>()
             {
                 {1, 20}, {2, 12}, {3, 20}, {4, 25}
@@ -136,11 +141,11 @@ namespace ifc2mct.Tests
             };
             
             // build bridge components
-            var builder = new BridgeBuilder(PATH);
+            var builder = new BridgeBuilder(INPATH, OUTPATH);
             builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
             builder.SetGaps(STARTGAP, ENDGAP);
             builder.SetOverallSection(secDimensions);
-            builder.SetPlateThicknesses(thicknessLists);
+            builder.SetThicknesses(thicknessLists);
             foreach (var stiffenerType in stiffenerTypeTable)
                 builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
             foreach (var stiffenerLayout in stiffenerLayoutTable)
@@ -154,17 +159,237 @@ namespace ifc2mct.Tests
             foreach (var diaphragmType in diaphragmTypeTable)
                 builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
             builder.AddDiaphragm(diaphragmList);
-            builder.Run2();
+            builder.Build();
         }
 
         [TestMethod]
-        public void BuildSectionedSolidTest()
+        public void BuildBoxGirderTest()
         {
-            const string PATH = "../../TestFiles/testSectionedSolid.ifc";
-            var builder = new BridgeBuilder(PATH);
-            builder.Run3();
+            const string OUTPATH = "../../TestFiles/box-girder.ifc";
+            // bridge data
+            // overall
+            const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
+            var secDimensions = new List<double>() { 1750, 6400, 50, 5550, 1968 };
+            var thicknessLists = new List<List<(double, double)>>()
+            {
+                new List<(double, double)>() { (28000, 16), (44000, 20), (72262, 16) },
+                new List<(double, double)>() { (6000, 16), (28000, 14), (33000, 16), (39000, 20), (44000, 16), (66302, 14), (72262, 16) },
+                new List<(double, double)>() { (28000, 16), (33000, 20), (39000, 25), (44000, 20), (72262, 16)}
+            };
+
+            // bearings
+            var bearingTypeTable = new Dictionary<int, (bool fixedLateral, bool fixedLongitudinal, bool fixedVertical)>()
+            {
+                {1, (true, true, false) }, // dual-fixed (non-guided)
+                {2, (false, true, false) }, // longitudinal-fixed (tranversely guided)
+                {3, (true, false, true) }, // lateral-fixed (longitudinally guided), pull-resistant
+                {4, (false, false, true) } // non-fixed (dual-guided), pull-resistant
+            };
+            var bearingList = new List<(double distanceAlong, double offsetLateral, int bearingTypeId)>()
+            {
+                (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71752, 1400, 3), (71752, -1900, 4)
+            };
+
+            // build bridge components
+            var builder = new BridgeBuilder(INPATH, OUTPATH);
+            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+            builder.SetGaps(STARTGAP, ENDGAP);
+            builder.SetOverallSection(secDimensions);
+            builder.SetThicknesses(thicknessLists);
+            foreach (var bearingType in bearingTypeTable)
+                builder.AddBearingType(bearingType.Key, bearingType.Value);
+            foreach (var bearing in bearingList)
+                builder.AddBearing(bearing);
+            builder.Build();
+        }
+
+        [TestMethod]
+        public void BuildBearingsTest()
+        {
+            const string OUTPATH = "../../TestFiles/bearings.ifc";
+            // bridge data
+            // overall
+            const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
+            var secDimensions = new List<double>() { 1750, 6400, 50, 5550, 1968 };
+            var thicknessLists = new List<List<(double, double)>>()
+            {
+                new List<(double, double)>(),
+                new List<(double, double)>(),
+                new List<(double, double)>() 
+            };
+
+            // bearings
+            var bearingTypeTable = new Dictionary<int, (bool fixedLateral, bool fixedLongitudinal, bool fixedVertical)>()
+            {
+                {1, (true, true, false) }, // dual-fixed (non-guided)
+                {2, (false, true, false) }, // longitudinal-fixed (tranversely guided)
+                {3, (true, false, true) }, // lateral-fixed (longitudinally guided), pull-resistant
+                {4, (false, false, true) } // non-fixed (dual-guided), pull-resistant
+            };
+            var bearingList = new List<(double distanceAlong, double offsetLateral, int bearingTypeId)>()
+            {
+                (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71752, 1400, 3), (71752, -1900, 4)
+            };
+
+            // build bridge components
+            var builder = new BridgeBuilder(INPATH, OUTPATH);
+            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+            builder.SetGaps(STARTGAP, ENDGAP);
+            builder.SetOverallSection(secDimensions);
+            builder.SetThicknesses(thicknessLists);
+            foreach (var bearingType in bearingTypeTable)
+                builder.AddBearingType(bearingType.Key, bearingType.Value);
+            foreach (var bearing in bearingList)
+                builder.AddBearing(bearing);
+            builder.Build();
+        }
+
+        [TestMethod]
+        public void BuildStiffenersTest()
+        {
+            const string OUTPATH = "../../TestFiles/top-flange-with-stiffeners.ifc";
+            // bridge data
+            // overall
+            const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
+            var secDimensions = new List<double>() { 1750, 6400, 50, 5550, 1968 };
+            var thicknessLists = new List<List<(double, double)>>()
+            {
+                new List<(double, double)>() { (28000, 16), (44000, 20), (72262, 16) },
+                new List<(double, double)>(),
+                new List<(double, double)>()
+            };
+
+            // stiffeners
+            var stiffenerTypeTable = new Dictionary<int, List<double>>()
+            {
+                { 1, new List<double>(){ 280, 300, 170, 8, 40 } }, // U-shape stiffener
+                {2, new List<double>(){ 250, 280, 160, 8, 35} }
+            };
+            var stiffenerLayoutTable = new Dictionary<int, List<(int num, double gap)>>()
+            {               
+                { 1, new List<(int, double)>() { (1, 870), (1, 530), (1, 850), (9, 600), (1, 850), (1, 530) } }
+            };
+            var stiffenerLists = new List<(int parentId, List<(double distanceAlong, int typeId, int layoutId)> stiffList)>()
+            {
+                { (0, new List<(double, int, int)>() { (33000, 1, 1), (39000, 2, 1), (72262, 1, 1) }) } // stiffeners on top flange
+            };
+
+            // build bridge components
+            var builder = new BridgeBuilder(INPATH, OUTPATH);
+            //builder.SetAlignment(true);
+            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+            builder.SetGaps(STARTGAP, ENDGAP);
+            builder.SetOverallSection(secDimensions);
+            builder.SetThicknesses(thicknessLists);
+
+            foreach (var stiffenerType in stiffenerTypeTable)
+                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+            foreach (var stiffenerLayout in stiffenerLayoutTable)
+                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+            foreach (var (parentId, stiffList) in stiffenerLists)
+                builder.AddStiffeners(parentId, stiffList);
+
+            builder.Build();
+        }
+
+        [TestMethod]
+        public void BuildDiaphragmsTest()
+        {
+            const string OUTPATH = "../../TestFiles/diaphragms.ifc";
+            // bridge data
+            // overall
+            const int START = 20000, END = 92302, VEROFFSET = -200, LATOFFSET = 0, STARTGAP = 40, ENDGAP = 40;
+            var secDimensions = new List<double>() { 1750, 6400, 50, 5550, 1968 };
+            var thicknessLists = new List<List<(double, double)>>()
+            {
+                new List<(double, double)>() ,
+                new List<(double, double)>() ,
+                new List<(double, double)>() 
+            };
+            // stiffeners
+            var stiffenerTypeTable = new Dictionary<int, List<double>>()
+            {
+                { 1, new List<double>(){ 160, 14 } }, // flat stiffener
+                { 2, new List<double>(){ 190, 16 } }, // flat stiffener
+                { 3, new List<double>(){ 240, 20 } }, // flat stiffener
+                { 4, new List<double>(){ 400, 16 } }, // flat stiffener
+                { 5, new List<double>(){ 280, 300, 170, 8, 40 } }, // U-shape stiffener
+                { 6, new List<double>(){ 400, 16 } } // edge plate
+            };
+            var stiffenerLayoutTable = new Dictionary<int, List<(int num, double gap)>>()
+            {
+                { 1, new List<(int, double)>() { (2, 250), (1, 8900), (1, 250) } },
+                { 2, new List<(int, double)>() { (1, 870), (1, 530), (1, 850), (9, 600), (1, 850), (1, 530) } },
+                { 3, new List<(int, double)>() { (/*1, 450), (2*/3, 400), (7, 450), (2, 400) } },
+                { 4, new List<(int, double)>() { (1, 400), (1, 1212) } },
+                { 5, new List<(int, double)>() { (1, 8), (1, 9884)} }
+            };
+            var stiffenerLists = new List<(int parentId, List<(double distanceAlong, int typeId, int layoutId)> stiffList)>()
+            {
+                { (0, new List<(double, int, int)>() { (72262, 2, 1) }) }, // stiffeners on top flange
+                { (0, new List<(double, int, int)>() { (72262, 5, 2) }) }, // stiffeners on top flange
+                { (1, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on left web
+                { (2, new List<(double, int, int)>() { (33000, 1, 4), (39000, 2, 4), (72262, 1, 4) }) }, // stiffeners on right web
+                { (3, new List<(double, int, int)>() { (28000, 2, 3), (44000, 3, 3), (72262, 2, 3) }) }, // stiffeners on bottom flange
+                { (0, new List<(double, int, int)>() { (72262, 6, 5) }) } // edge plate on top flange
+            };
+
+            // cross bracing
+            var diaphragmTypeTable = new Dictionary<int, double>()
+            {
+                {1, 20}, {2, 12}, {3, 20}, {4, 25}
+            };
+            var diaphragmList = new List<(int typeId, int num, double gap)>()
+            {
+                (1, 1, 550), (2, 1, 15000)
+            };
+
+            // build bridge components
+            var builder = new BridgeBuilder(INPATH, OUTPATH);
+            //builder.SetAlignment(true);
+            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+            builder.SetGaps(STARTGAP, ENDGAP);
+            builder.SetOverallSection(secDimensions);
+            builder.SetThicknesses(thicknessLists);
+
+            foreach (var stiffenerType in stiffenerTypeTable)
+                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+            foreach (var stiffenerLayout in stiffenerLayoutTable)
+                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+            foreach (var (parentId, stiffList) in stiffenerLists)
+                builder.AddStiffeners(parentId, stiffList);
+            
+            foreach (var diaphragmType in diaphragmTypeTable)
+                builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
+            builder.AddDiaphragm(diaphragmList);
+            builder.Build();
+        }
+
+    }
+
+    [TestClass]
+    public class AlignmentBuilderTest
+    {
+        [TestMethod]
+        public void BuildAlignmentTest()
+        {
+            const string PATH = "../../TestFiles/alignment.ifc";
+            var builder = new AlignmentBuilder(PATH);
+            builder.Run();
+        }
+
+        [TestMethod]
+        public void CheckNullAlignment()
+        {
+            const string PATH = "../../TestFiles/sectioned-spine.ifc";
+            using (var model = IfcStore.Open(PATH))
+            {
+                var alignment = model.Instances.OfType<IfcAlignment>().FirstOrDefault();
+                Assert.IsNull(alignment);
+            }
         }
     }
+
     [TestClass]
     public class GeometryEngineTest
     {

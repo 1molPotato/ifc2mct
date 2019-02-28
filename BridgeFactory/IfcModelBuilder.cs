@@ -11,6 +11,8 @@ using Xbim.Ifc4.GeometryResource;
 using Xbim.Ifc4.Interfaces;
 using Xbim.Ifc4.Kernel;
 using Xbim.Ifc4.MeasureResource;
+using Xbim.Ifc4.PresentationAppearanceResource;
+using Xbim.Ifc4.ProductExtension;
 using Xbim.Ifc4.ProfileResource;
 using Xbim.Ifc4.PropertyResource;
 using Xbim.Ifc4.RepresentationResource;
@@ -19,6 +21,67 @@ namespace ifc2mct.BridgeFactory
 {
     public class IfcModelBuilder
     {
+        public static void AddProductIntoSpatial(IfcStore m, IfcSpatialStructureElement spatial, IfcProduct e, string info)
+        {
+            using (var txn = m.BeginTransaction(info))
+            {
+                spatial.AddElement(e);
+                txn.Commit();
+            }
+        }
+
+        public static IfcSite CreateSite(IfcStore m, string name)
+        {
+            using (var txn = m.BeginTransaction("Create Site"))
+            {
+                var site = m.Instances.New<IfcSite>(s =>
+                {
+                    s.Name = name;
+                    s.CompositionType = IfcElementCompositionEnum.ELEMENT;
+                });
+                // Get the only one project and add site to it
+                var project = m.Instances.OfType<IfcProject>().FirstOrDefault();
+                project?.AddSite(site);
+
+                txn.Commit();
+                return site;
+            }
+        }
+
+        public static IfcSectionedSolidHorizontal CreateSolidShapeForCurve(IfcStore m, IfcCurve directrix, double start, double end)
+        {
+            return m.Instances.New<IfcSectionedSolidHorizontal>(ss =>
+            {
+                ss.Directrix = directrix;
+                var profile = MakeCircleProfile(m, 40);
+                ss.CrossSections.Add(profile);
+                ss.CrossSections.Add(profile);
+                ss.CrossSectionPositions.Add(MakeDistanceExpression(m, start));
+                ss.CrossSectionPositions.Add(MakeDistanceExpression(m, end));
+            });
+        }
+
+        public static void SetSurfaceStyle(IfcStore m, IfcGeometricRepresentationItem geomItem, double red, double green, double blue, double transparency = 0)
+        {
+            var styledItem = m.Instances.New<IfcStyledItem>(i =>
+            {
+                i.Item = geomItem;
+                i.Styles.Add(m.Instances.New<IfcSurfaceStyle>(s =>
+                {
+                    s.Side = IfcSurfaceSide.POSITIVE;
+                    s.Styles.Add(m.Instances.New<IfcSurfaceStyleRendering>(r =>
+                    {
+                        r.SurfaceColour = m.Instances.New<IfcColourRgb>(c =>
+                        {
+                            c.Red = red;
+                            c.Green = green;
+                            c.Blue = blue;
+                        });
+                        r.Transparency = transparency;
+                    }));
+                }));
+            });
+        }
 
         public static IfcCartesianPoint MakeCartesianPoint(IfcStore m, double x = 0, double y = 0, double z = 0)
         {
@@ -292,6 +355,11 @@ namespace ifc2mct.BridgeFactory
             return propertySet;
         }
 
+        public static IfcPropertyTableValue MakePropertyTableValue(IfcStore m, string name)
+        {
+            return m.Instances.New<IfcPropertyTableValue>(ptv => ptv.Name = name);
+        }
+
         public static IfcDistanceExpression MakeDistanceExpression(IfcStore m, double distanceAlong, double offsetLateral = 0, double offsetVertical = 0, bool alongHorizontal = true)
         {
             return m.Instances.New<IfcDistanceExpression>(d =>
@@ -319,7 +387,8 @@ namespace ifc2mct.BridgeFactory
             {
                 p.PlacementRelTo = curve;
                 p.Distance = distance;
-                p.Orientation = orientation ?? m.Instances.New<IfcOrientationExpression>();
+                if (orientation != null)
+                    p.Orientation = orientation;
             });
             lp.CartesianPosition = ToAx3D(m, lp);
             return lp;
@@ -351,7 +420,7 @@ namespace ifc2mct.BridgeFactory
                 }
             }            
             return MakeAxis2Placement3D(m, origin, localZ, localX);
-        }                         
+        }         
     }
 }
 
