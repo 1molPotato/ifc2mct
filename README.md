@@ -5,8 +5,9 @@ The project **ifc2mct** is part of my Master's thesis, where an IFC4x1-based met
 
 This sub-project, which is called **ifc2mct.BridgeFactory**, aims to provide a uniform interface (**BridgeBuilder**) to **Application layer** so that any application in this layer is able to produce IFC data of a continus steel-box-girder bridge. The infrastructure of this project is [XbimEssentials](https://github.com/xBimTeam/XbimEssentials) library, which provides basic functions to access and produce IFC data. **AlignmentBuilder** is a built-in class to create an instance of entity IfcAlignment that has a simple alignment curve. This module is not necessary when **Application layer** or other sources can provide alignment information, for example, IFC files exported from Civil3D. **IfcModelBuilder** is an encapsulation of some interfaces of XbimEssentials in order to quickly construct IFC entity from basic geometric data structure (point, line, matrix, etc). The overall architecture is shown below:
 
-<img src="./Images/bridge-factory-architecture.png" width = "75%" height = "75%" alt="architecture" align=center />
-
+<div align=center>
+<img src="./Images/bridge-factory-architecture.png" width = "75%" height = "75%" alt="architecture"/>
+</div>
 
 The table below illustrates the interfaces provided by **ifc2mct.BridgeFactory**.
 
@@ -26,24 +27,34 @@ AddBearing | distanceAlong(Double), offsetLateral(Double), typeId(Integer) | add
 
 In the IFC4x1-based bridge representation presented, bridge alignment curve is an offset curve of the overall alignment curve as shown below:
 
-<img src="./Images/bridge-alignment.png" width = "90%" height = "90%" alt="bridge-alignment" align=center />
+<div align=center>
+<img src="./Images/bridge-alignment.png" width = "90%" height = "90%" alt="bridge-alignment"/>
+</div>
 
 **IfcBearing** is a newly added entity in IFC4x2 draft, so an instance of **IfcProxy** is used to replace it and a property set *Pset_BearingCommon* is assigned. Its positioning depends on the entity **IfcLinearPlacement**, in case most vendors haven't supported this IFC4x1 entity, the arribute *CartesianPosition* should be assigned for backward compatibility.
 
-<img src="./Images/bearings.png" width = "90%" height = "90%" alt="bearings" align=center />
+<div align=center>
+<img src="./Images/bearings.png" width = "90%" height = "90%" alt="bearings"/>
+</div>
 
 Flanges and webs are the most important components in a box-girder so they should better be represented by individual entities and then aggregated into an assembly which represents the girder. Some IFC4x2 features (say new *PredefinedType*) are adopted. **IfcSectionedSolidHorizontal** is selected to represent these linear element's shape along the alignment.
 
-<img src="./Images/girder.png" width = "90%" height = "90%" alt="girder" align=center />
+<div align=center>
+<img src="./Images/girder.png" width = "90%" height = "90%" alt="girder"/>
+</div>
 
 Stiffenrs (stiffening ribs) are part of their parent plates (flanges or webs), so they are aggregated into an instance of **IfcElementAssembly**. 
 
-<img src="./Images/stiffeners.png" width = "90%" height = "90%" alt="stiffeners" align=center />
+<div align=center>
+<img src="./Images/stiffeners.png" width = "90%" height = "90%" alt="stiffeners"/>
+</div>
 
 Currently, [XbimGeometry](https://github.com/xBimTeam/XbimGeometry) library hasn't adapted to IFC4x1. To enable the visualization, the source code is reviewed and updated to comput the geometry of **IfcAlignmentCurve**, **IfcSectionedSolidHorizontal** and **IfcLinearPlacement**. For now, it's not a good implementation and can only work in a particular situation when the horizontal alignment curve contains only one line segment or arc segment.
 
-<img src="./Images/bridge-circular.png" width = "75%" height = "75%" alt="bridge-circular" align=center />
-<img src="./Images/bridge-straight.png" width = "75%" height = "75%" alt="bridge-circular" align=center />
+<div align=center>
+<img src="./Images/bridge-circular.png" width = "75%" height = "75%" alt="bridge-circular"/>
+<img src="./Images/bridge-straight.png" width = "75%" height = "75%" alt="bridge-circular"/>
+</div>
 
 # Part 2
 
