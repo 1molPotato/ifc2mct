@@ -58,4 +58,8 @@ Currently, [XbimGeometry](https://github.com/xBimTeam/XbimGeometry) library hasn
 
 # Part 2
 
+<div align=center>
+<img src="./Images/uml-mct-model.png" width="95%" alt="mct-model"/>
+</div>
+
 To be continued..
