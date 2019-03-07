@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ifc2mct.MCTFactory.Model
+namespace ifc2mct.MctFactory.Model
 {
     public enum MCTStiffenedPlateType { TOP_FLANGE, LEFT_WEB, RIGHT_WEB, BOTTOM_FLANGE }
     public enum MCTStiffenedLocation { LEFT, CENTER, RIGHT, WEB }

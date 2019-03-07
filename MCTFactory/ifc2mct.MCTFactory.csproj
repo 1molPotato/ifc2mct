@@ -7,8 +7,8 @@
     <ProjectGuid>{D059D6F9-324A-483A-8835-81B17814D82C}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>ifc2mct.MCTFactory</RootNamespace>
-    <AssemblyName>ifc2mct.MCTFactory</AssemblyName>
+    <RootNamespace>ifc2mct.MctFactory</RootNamespace>
+    <AssemblyName>ifc2mct.MctFactory</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -41,7 +41,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MctFactory.cs" />
     <Compile Include="MCTStore.cs" />
+    <Compile Include="Models\MctElement.cs" />
+    <Compile Include="Models\MctLoad.cs" />
+    <Compile Include="Models\MctMaterial.cs" />
+    <Compile Include="Models\MctNode.cs" />
+    <Compile Include="Models\MctSection.cs" />
+    <Compile Include="Models\MctSectionSTL.cs" />
+    <Compile Include="Models\MctStaticLoadCase.cs" />
+    <Compile Include="Models\MctSupport.cs" />
+    <Compile Include="Models\MctUnitSystem.cs" />
     <Compile Include="Model\MCTElement.cs" />
     <Compile Include="Model\MCTFrameElement.cs" />
     <Compile Include="Model\MCTHSection.cs" />

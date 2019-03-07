@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ifc2mct.MCTFactory.Model
+namespace ifc2mct.MctFactory.Model
 {
     public enum MCTFrameElementType
     {

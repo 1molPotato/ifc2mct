@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.28307.168
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ifc2mct.BridgeFactory", "BridgeFactory\ifc2mct.BridgeFactory.csproj", "{5D100460-7376-4539-9CD2-E96E8CCCED86}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ifc2mct.MCTFactory", "MCTFactory\ifc2mct.MCTFactory.csproj", "{D059D6F9-324A-483A-8835-81B17814D82C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ifc2mct.MctFactory", "MctFactory\ifc2mct.MctFactory.csproj", "{D059D6F9-324A-483A-8835-81B17814D82C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ifc2mct.Tests", "Tests\ifc2mct.Tests.csproj", "{79B595BD-9153-4118-B834-698421145A17}"
 EndProject

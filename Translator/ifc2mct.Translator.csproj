@@ -121,9 +121,9 @@
       <Project>{5d100460-7376-4539-9cd2-e96e8ccced86}</Project>
       <Name>ifc2mct.BridgeFactory</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MCTFactory\ifc2mct.MCTFactory.csproj">
+    <ProjectReference Include="..\MCTFactory\ifc2mct.MctFactory.csproj">
       <Project>{d059d6f9-324a-483a-8835-81b17814d82c}</Project>
-      <Name>ifc2mct.MCTFactory</Name>
+      <Name>ifc2mct.MctFactory</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

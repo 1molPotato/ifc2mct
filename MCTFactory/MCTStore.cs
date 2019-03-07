@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using ifc2mct.MCTFactory.Model;
+using ifc2mct.MctFactory.Model;
 
-namespace ifc2mct.MCTFactory
+namespace ifc2mct.MctFactory
 {
     public class MCTStore
     {
