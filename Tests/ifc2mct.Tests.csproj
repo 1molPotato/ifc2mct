@@ -116,7 +116,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BridgeFactoryTest.cs" />
-    <Compile Include="MCTFactoryTest.cs" />
+    <Compile Include="MctFactoryTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TranslatorTest.cs" />
   </ItemGroup>
@@ -135,9 +135,9 @@
       <Project>{cc7a30d0-93e5-40c0-b406-c8fe8fb85fcb}</Project>
       <Name>ifc2mct.Translator</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MCTFactory\ifc2mct.MCTFactory.csproj">
+    <ProjectReference Include="..\MCTFactory\ifc2mct.MctFactory.csproj">
       <Project>{d059d6f9-324a-483a-8835-81b17814d82c}</Project>
-      <Name>ifc2mct.MCTFactory</Name>
+      <Name>ifc2mct.MctFactory</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup />
