@@ -1,7 +1,12 @@
 # ifc2mct
+
+## Overview
+
 The project **ifc2mct** is part of my Master's thesis, where an IFC4x1-based method to describe alignment-based steel plate-girder (box-grder) bridge and its mapping to MCT (midas command text) are both presented. To follow the dissertation, this project is also divided into two parts, one is to provide interfaces to produce the bridge's data in the form of .ifc, the other is to translate the built data to mct file which can be imported to **Midas Civil**.
 
-# Part 1
+## Introduction
+
+### Part 1
 
 This sub-project, which is called **ifc2mct.BridgeFactory**, aims to provide a uniform interface (**BridgeBuilder**) to **Application layer** so that any application in this layer is able to produce IFC data of a continus steel-box-girder bridge. The infrastructure of this project is [XbimEssentials](https://github.com/xBimTeam/XbimEssentials) library, which provides basic functions to access and produce IFC data. **AlignmentBuilder** is a built-in class to create an instance of entity IfcAlignment that has a simple alignment curve. This module is not necessary when **Application layer** or other sources can provide alignment information, for example, IFC files exported from Civil3D. **IfcModelBuilder** is an encapsulation of some interfaces of XbimEssentials in order to quickly construct IFC entity from basic geometric data structure (point, line, matrix, etc). The overall architecture is shown below:
 
@@ -56,10 +61,18 @@ Currently, [XbimGeometry](https://github.com/xBimTeam/XbimGeometry) library hasn
 <img src="./Images/bridge-straight.png" width="75%" alt="bridge-circular"/>
 </div>
 
-# Part 2
+### Part 2
 
 <div align=center>
 <img src="./Images/uml-mct-model.png" width="95%" alt="mct-model"/>
 </div>
 
+<div align=center>
+<img src="./Images/mapping-model.png" width="95%" alt="mct-model"/>
+</div>
+
 To be continued..
+
+## Getting Started
+
+## Acknowledgements
