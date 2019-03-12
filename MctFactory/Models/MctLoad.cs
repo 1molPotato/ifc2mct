@@ -26,6 +26,17 @@ namespace ifc2mct.MctFactory.Models
             AddNode(nodes);
         }
 
+        public MctNodalLoad(List<MctNode> nodes, List<double> forces)
+        {
+            AddNode(nodes);
+            Fx = forces[0];
+            Fy = forces[1];
+            Fz = forces[2];
+            Mx = forces[3];
+            My = forces[4];
+            Mz = forces[5];
+        }
+
         // Interfaces to add nodes
         public void AddNode(MctNode node)
         {
@@ -36,6 +47,19 @@ namespace ifc2mct.MctFactory.Models
         {
             foreach (var node in nodes)
                 AddNode(node);
+        }
+        public bool IsSameLoadType(List<double> forces)
+        {
+            const int FORCENUM = 6;
+            int count = forces.Count;
+            if (count != FORCENUM) return false;
+            if (forces[0] != Fx) return false;
+            if (forces[1] != Fy) return false;
+            if (forces[2] != Fz) return false;
+            if (forces[3] != Mx) return false;
+            if (forces[4] != My) return false;
+            if (forces[5] != Mz) return false;
+            return true;
         }
 
         // NODE_LIST, FX, FY, FZ, MX, MY, MZ, GROUP

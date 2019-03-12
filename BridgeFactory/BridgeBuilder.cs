@@ -323,7 +323,15 @@ namespace ifc2mct.BridgeFactory
             // Build the bearings
             var bearings = CreateBearings(girder);
             foreach (var bearing in bearings)
+            {
+                //_model.Instances.New<IfcRelConnectsElements>(rce =>
+                //{
+                //    rce.RelatedElement = girder;
+                //    rce.RelatingElement = bearing;
+                //}); // IFC4x2 features
                 IfcModelBuilder.AddProductIntoSpatial(_model, site, bearing, "Add the bearing to site");
+            }
+                
 
             try
             {
@@ -453,7 +461,7 @@ namespace ifc2mct.BridgeFactory
             var plateAssembly = this._model.Instances.New<IfcElementAssembly>(ea => 
             {
                 ea.Name = plateCode == 0 ? "顶板" : (plateCode == 1 ? "左腹板" : (plateCode == 2 ? "右腹板" : "底板"));
-                ea.ObjectType = plateCode == 0 ? "TOP_FLANGE" : (plateCode == 3 ? "BOTTOM_FLANGE" : "WEB");
+                ea.ObjectType = (plateCode == 0 || plateCode == 3) ? "FLANGE_ASSEMBLY" : "WEB_ASSEMBLY";
                 ea.PredefinedType = IfcElementAssemblyTypeEnum.USERDEFINED;
             });
             var relAggregates = this._model.Instances.New<IfcRelAggregates>(rg => rg.RelatingObject = plateAssembly);
@@ -535,6 +543,7 @@ namespace ifc2mct.BridgeFactory
             {
                 string assemblyName = plateCode == 0 ? "顶板纵肋" : (plateCode == 3 ? "底板纵肋" : "腹板纵肋");
                 ea.Name = assemblyName;
+                ea.ObjectType = "STIFFENER_ASSEMBLY";
                 if (stiffenerList.Any())
                 {
                     dimensionNum = StiffenerTypeTable[stiffenerList[0].typeId].Count;
@@ -758,7 +767,7 @@ namespace ifc2mct.BridgeFactory
             {
                 ea.Name = "横向支撑";
                 ea.ObjectPlacement = IfcModelBuilder.MakeLinearPlacement(_model, BridgeAlignmentCurve, distance);
-                ea.ObjectType = "DIAPHRAGM";
+                ea.ObjectType = "CROSS_BRACING";
                 ea.PredefinedType = IfcElementAssemblyTypeEnum.USERDEFINED;
             });
             

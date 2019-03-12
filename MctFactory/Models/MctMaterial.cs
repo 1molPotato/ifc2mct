@@ -52,7 +52,7 @@ namespace ifc2mct.MctFactory.Models
         }
     }
 
-    public class MctMateriaValue : MctMaterial
+    public class MctMaterialValue : MctMaterial
     {
         public double Elast { get; set; }
         public double Poisson { get; set; }
@@ -61,7 +61,7 @@ namespace ifc2mct.MctFactory.Models
         public double Mass { get; set; }
 
 
-        public MctMateriaValue()
+        public MctMaterialValue()
         {
             // empty
         }

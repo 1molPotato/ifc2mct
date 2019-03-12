@@ -22,6 +22,19 @@ namespace ifc2mct.MctFactory.Models
             _staticLoads.Add(load);
         }
 
+        public void AddNodalLoad(MctNode node, List<double> forces)
+        {
+            foreach (var load in _staticLoads)
+            {
+                if (load is MctNodalLoad nl && nl.IsSameLoadType(forces))
+                {
+                    nl.AddNode(node);
+                    return;
+                }                    
+            }
+            AddStaticLoad(new MctNodalLoad(new List<MctNode>() { node }, forces));
+        }
+
         public override string ToString()
         {
             string ret = $"\n*USE-STLD,{Name}";

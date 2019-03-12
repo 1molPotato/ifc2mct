@@ -1,0 +1,44 @@
+;--------------------------------------
+;	MIDAS/Civil Text(MCT) File
+;	Date/Time : 2019/3/11 11:19:29
+;	Produced by : ifc2mct.MctFactory
+;	Author : lyu kaiyuan
+;--------------------------------------
+*UNIT	; Unit System
+; FORCE, LENGTH, HEAT, TEMPER
+N,MM,CAL,C
+
+*NODE	; Nodes
+; iNO, X, Y, Z
+1,0,0,0
+2,1500,0,0
+3,3000,0,0
+
+*ELEMENT	; Elements
+1,BEAM,1,1,1,2,0,0
+2,BEAM,1,1,2,3,0,0
+
+*MATERIAL	; Materials
+1,STEEL,q345,0,0,,C,NO,0.02,1,GB12(S),,Q345,NO,0
+
+*SECTION	; Sections
+1,DBUSER,I-shape,CC,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15
+
+*CONSTRAINT	; Supports
+1 ,011101,
+3 ,111101,
+
+*STLDCASE	; Static Load Cases
+; LCNAME, LCTYPE, DESC
+case1,CS,
+
+*USE-STLD,case1
+
+; *SELFWEIGHT, X, Y, Z, GROUP
+*SELFWEIGHT,0,0,-1.1,
+
+*CONLOAD    ; Nodal Loads
+; NODE_LIST, FX, FY, FZ, MX, MY, MZ, GROUP
+2 ,0,0,-1000,0,0,0,
+
+*ENDDATA

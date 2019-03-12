@@ -42,6 +42,17 @@ namespace ifc2mct.MctFactory.Models
                 AddNode(node);
         }
 
+        public bool IsSameBearingType(List<bool> constraints)
+        {
+            const int CONSTRNUM = 6;
+            int count = constraints.Count;
+            if (count != CONSTRNUM) return false;
+            for (int i = 0; i < CONSTRNUM; ++i)
+                if (_constraints[i] != constraints[i])
+                    return false;
+            return true;
+        }
+
         // NODE_LIST, CONST (Dx, Dy, Dz, Rx, Ry, Rz), GROUP
         public override string ToString()
         {

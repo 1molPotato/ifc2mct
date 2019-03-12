@@ -122,8 +122,22 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="TestFiles\alignment.ifc" />
+    <None Include="TestFiles\bearings.ifc" />
+    <None Include="TestFiles\box-girder.ifc" />
+    <None Include="TestFiles\box_test.mct" />
+    <None Include="TestFiles\bridgeLineTest.ifc" />
+    <None Include="TestFiles\bridgeTest.ifc" />
+    <None Include="TestFiles\completed-bridge-straight.ifc" />
+    <None Include="TestFiles\completed-bridge.ifc" />
+    <None Include="TestFiles\diaphragms.ifc" />
+    <None Include="TestFiles\empty_mct_test.mct" />
+    <None Include="TestFiles\mct_test.mct" />
+    <None Include="TestFiles\sectioned-spine.ifc" />
     <None Include="TestFiles\SteelBridgeNew.ifc" />
     <None Include="TestFiles\test.ifc" />
+    <None Include="TestFiles\testSectionedSolid.ifc" />
+    <None Include="TestFiles\top-flange-with-stiffeners.ifc" />
     <None Include="TestFiles\us.ifc" />
   </ItemGroup>
   <ItemGroup>

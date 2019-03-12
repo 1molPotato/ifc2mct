@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using ifc2mct.MctFactory;
-using ifc2mct.MctFactory.Model;
 using ifc2mct.MctFactory.Models;
 
 namespace ifc2mct.Tests
@@ -13,18 +12,9 @@ namespace ifc2mct.Tests
     public class MctFactoryTest
     {
         [TestMethod]
-        public void WriteMCTFileTest()
-        {
-            var mctStore = new MCTStore();
-            string outfile = "../../TestFiles/empty_mct_test.mct";
-            mctStore.WriteMCTFile(outfile);
-            Assert.IsTrue(File.Exists(outfile));
-        }
-
-        [TestMethod]
         public void MctWriteFileTest()
         {
-            string PATH = "../../TestFiles/mct_test.mct";
+            string PATH = "../../TestFiles/mct-test.mct";
             var mct = new MctStore()
             {
                 UnitSystem = new MctUnitSystem() { LengthUnit = MctLengthUnitEnum.MM }
@@ -33,7 +23,8 @@ namespace ifc2mct.Tests
             var nodes = new List<MctNode>()
             {
                 new MctNode(1, 0, 0, 0),
-                new MctNode(2, 5000, 0, 0)
+                new MctNode(2, 1500, 0, 0),
+                new MctNode(3, 3000, 0, 0)
             };
             mct.AddNode(nodes);
 
@@ -45,45 +36,48 @@ namespace ifc2mct.Tests
             mct.AddMateral(mat);
 
             // Add section
-            var dimensions = new List<double>() { 1750, 6400, 50, 6000, 2000, 16, 16, 14 };
-            var sec = new MctSectionSTLB(dimensions)
+            var sec = new MctSectionDbUser(MctSectionDbUserTypeEnum.H)
             {
-                Id = 39,
-                Name = "SW3-SW4",
-                IsSD = true
-            };            
-            sec.AddStiffenerType("flat1", MctStiffenerTypeEnum.FLAT, new List<double>() { 190, 16 });
-            sec.AddStiffenerType("u2", MctStiffenerTypeEnum.USHAPE, new List<double>() { 280, 300, 170, 8, 40 });
-            var layout = new MctStiffenerLayoutSTL()
-            {
-                StiffenedPlate = MctStiffenedPlateTypeEnum.TOP_FLANGE,
-                StiffenedLocation = MctStiffenedLocationEnum.CENTER,
-                LocationName = "上-中",
-                RefPoint = MctStiffenedRefPointEnum.TOP_LEFT
+                DbName = "GB-YB05",
+                Name = "I-shape",
+                Id = 1,
+                SectionName = "HW 300x305x15/15",
+                IsDb = true
             };
-            var gapGroups = new List<(int, double)>()
-            {
-                (1, 500), (2, 600)
-            };
-            layout.AddStiffener(gapGroups, sec.StiffenerTypeByName("u2"), MctStiffenerDirectionEnum.DOWNWARD);
-            sec.AddStiffenerLayout(layout);
             mct.AddSection(sec);
 
             // Add element
             var element = new MctFrameElement()
             {
-                Type = MctElementTypeEnum.BEAM, Id = 1, Node1 = nodes[0], Node2 = nodes[1], Mat = mat, Sec = sec
+                Type = MctElementTypeEnum.BEAM,
+                Id = 1,
+                Node1 = nodes[0],
+                Node2 = nodes[1],
+                Mat = mat,
+                Sec = sec
+            };
+            var element2 = new MctFrameElement()
+            {
+                Type = MctElementTypeEnum.BEAM,
+                Id = 2,
+                Node1 = nodes[1],
+                Node2 = nodes[2],
+                Mat = mat,
+                Sec = sec
             };
             mct.AddElement(element);
+            mct.AddElement(element2);
 
             // Add support
             var support = new MctCommonSupport(new List<MctNode>() { nodes[0] }, new List<bool>() { false, true, true, true, false, true });
+            var support2 = new MctCommonSupport(new List<MctNode>() { nodes[2] }, new List<bool>() { true, true, true, true, false, true });
             mct.AddSupport(support);
+            mct.AddSupport(support2);
 
             // Add load
             var load = new MctNodalLoad(new List<MctNode>() { nodes[1] })
             {
-                Fz = -100
+                Fz = -1000
             };
             var self = new MctSelfWeight()
             {
@@ -99,54 +93,19 @@ namespace ifc2mct.Tests
         }
 
         [TestMethod]
-        public void MCTStoreAddObjectTest()
+        public void MctSectionDbUserTest()
         {
-            var store = new MCTStore();
-            var node = new MCTNode(0, 1.1, 2.3, 3.4);
-            store.AddObject(node);
-            var actual = store.Nodes.First();
-            Assert.AreEqual(node, actual);
-            var element = new MCTFrameElement(1, 2, 3, 4, 5);
-            store.AddObject(element);
-            var actual2 = store.Elements.First();
-            Assert.AreEqual(element, actual2);
-            var mat = new MCTMaterial(1, MatType.STEEL, "Steel");
-            store.AddObject(mat);
-            var actual3 = store.Materials.First();
-        }
-
-        [TestMethod]
-        public void MCTWriteBoxSectionTest()
-        {
-            var mctStore = new MCTStore();
-            string outfile = "../../TestFiles/box_test.mct";
-
-            var dimensions = new List<double>() { 1.75, 6.4, 0.05, 5.7, 2.3, 0.016, 0.016, 0.014 };
-            var section = new MCTSteelBoxSection(3, "no_stiff", dimensions);
-            var stiff = new MCTStiffener("U-Stiff", new List<double>() { 0.28, 0.3, 0.17, 0.008, 0.05 });
-            section.Stiffen(stiff);
-            var layout = new MCTStiffeningLayout(MCTStiffenedPlateType.TOP_FLANGE, MCTStiffenedLocation.CENTER);
-            var stiffeners = new List<(double dist, string name)>()
+            var sec = new MctSectionDbUser(MctSectionDbUserTypeEnum.H)
             {
-                (1, stiff.Name), (1, stiff.Name)
+                DbName = "GB-YB05",
+                Name = "I-shape",
+                Id = 1,
+                SectionName = "HW 300x305x15/15",
+                IsDb = true
             };
-            layout.Stiffen(stiffeners);
-            section.Stiffen(layout);
-
-            var stiff2 = new MCTStiffener("P-Stiff", new List<double>() { 0.18, 0.008 });
-            section.Stiffen(stiff2);
-            var layout2 = new MCTStiffeningLayout(MCTStiffenedPlateType.LEFT_WEB);
-            layout2.Stiffen(1.2, stiff2.Name);
-            section.Stiffen(layout2);
-
-            mctStore.AddObject(section);
-            mctStore.WriteMCTFile(outfile);
-        }
-
-        [TestMethod]
-        public void Test()
-        {
-            
+            string expected = "1,DBUSER,I-shape,CC,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15";
+            string actual = sec.ToString();
+            Assert.AreEqual(expected, actual);
         }
 
         [TestMethod]
@@ -252,9 +211,9 @@ namespace ifc2mct.Tests
             var layout = new MctStiffenerLayoutSTL()
             {
                 StiffenedPlate = MctStiffenedPlateTypeEnum.TOP_FLANGE,
-                StiffenedLocation = MctStiffenedLocationEnum.CENTER,
+                StiffenedLocation = MctStiffenerLocationEnum.CENTER,
                 LocationName = "上-中",
-                RefPoint = MctStiffenedRefPointEnum.TOP_LEFT                
+                RefPoint = MctStiffenerRefPointEnum.TOP_LEFT                
             };
             var gapGroups = new List<(int, double)>()
             {
@@ -272,9 +231,9 @@ namespace ifc2mct.Tests
             layout = new MctStiffenerLayoutSTL()
             {
                 StiffenedPlate = MctStiffenedPlateTypeEnum.LEFT_WEB,
-                StiffenedLocation = MctStiffenedLocationEnum.WEB,
+                StiffenedLocation = MctStiffenerLocationEnum.WEB,
                 LocationName = "腹板",
-                RefPoint = MctStiffenedRefPointEnum.TOP_LEFT
+                RefPoint = MctStiffenerRefPointEnum.TOP_LEFT
             };
             var gaps = new List<double>()
             {

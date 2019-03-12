@@ -1,302 +1,299 @@
 ﻿using System;
+using System.IO;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ifc2mct.BridgeFactory;
 using ifc2mct.MctFactory;
-using ifc2mct.MctFactory.Model;
+using ifc2mct.MctFactory.Models;
 using Xbim.Common.Geometry;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
+using Xbim.Ifc4.MeasureResource;
 
 namespace ifc2mct.Translator
-{
+{    
     public class Worker
     {
-
-        #region Fields
+        private readonly double _boxPlatesNum = 4;
         private readonly IfcStore _ifcModel;
-        private readonly MCTStore _mctStore;
-        private readonly HashSet<MCTStiffener> _stiffeners;
-        #endregion
+        private readonly MctStore _mctStore = new MctStore();        
+        private readonly Dictionary<int, SortedList<double, bool>> _positionsTable = new Dictionary<int, SortedList<double, bool>>();
 
-        // Constructor
+        private List<IIfcProxy> Bearings { get; set; }
+        private List<IIfcElementAssembly> Bracings { get; set; }
+        private int SectionCounter { get; set; }
+
+        public Worker(string path)
+        {
+            if (File.Exists(path))
+                _ifcModel = IfcStore.Open(path);
+            else
+                throw new ArgumentException("Invalid path to open ifc model");
+            Initialise();
+        }
+
         public Worker(IfcStore model)
         {
             _ifcModel = model;
-            _mctStore = new MCTStore();
-            _stiffeners = new HashSet<MCTStiffener>();
-            InitialiseUnit();
+            Initialise();                        
         }
 
-        private void InitialiseUnit()
+        // Interfaces
+        public void Run()
         {
+            try
+            {
+                TranslateGirder();                
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+        }
+        
+        public void WriteMctFile(string path)
+        {
+            if (File.Exists(path))
+                Console.WriteLine($"Warning: operation will overwrite the existing file {path}");
+            string dir = new FileInfo(path).Directory.FullName;
+            if (!Directory.Exists(dir))
+                throw new ArgumentException($"Directory {dir} doesn't exist");
+            _mctStore.WriteMctFile(path);
+        }
+
+        // Utilities
+        private void Initialise()
+        {
+            try
+            {
+                if (_ifcModel == null)
+                    throw new InvalidOperationException("Empty model cannot be processed");
+                InitialiseUnitSystem();
+                if (!_ifcModel.Instances.OfType<IIfcAlignment>().Any())
+                    throw new InvalidOperationException("Model without IfcAlignment cannot be processed");
+                if (_ifcModel.Instances.OfType<IIfcAlignment>().FirstOrDefault().Axis == null)
+                    throw new InvalidOperationException("Model without IfcAlignmentCurve cannot be processed");
+                var directrices = _ifcModel.Instances.OfType<IIfcOffsetCurveByDistances>()
+                    .Where(ocbd => ocbd.BasisCurve is IIfcAlignmentCurve);
+                foreach (var directrix in directrices)
+                    _positionsTable[directrix.EntityLabel] = new SortedList<double, bool>();
+                Bearings = _ifcModel.Instances.OfType<IIfcProxy>()
+                    .Where(p => p.ObjectType == "POT").ToList();
+            }
+            catch (InvalidOperationException e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            catch (Exception e)
+            {
+                Console.Write(e.Message);
+            }
+        }
+
+        private void InitialiseUnitSystem()
+        {
+            // Assume that the ifc model is using SI unit system
+            // we might need a more robust implementation in the future
+            // TODO
             var siUnits = _ifcModel.Instances.OfType<IIfcProject>().FirstOrDefault().UnitsInContext.Units.OfType<IIfcSIUnit>();
-            string force = "", length = "", heat = "", temper = "";
-            var forceUnit = siUnits
-                .Where(u => u.UnitType == IfcUnitEnum.FORCEUNIT).FirstOrDefault();
-            force = forceUnit == null ? force : (forceUnit.Prefix == IfcSIPrefix.KILO ? "KN" : "N");
-            var lengthUnit = siUnits
-                .Where(u => u.UnitType == IfcUnitEnum.LENGTHUNIT).FirstOrDefault();
-            length = lengthUnit == null ? length : (lengthUnit.Prefix == IfcSIPrefix.KILO ? "KM" : (lengthUnit.Prefix == IfcSIPrefix.MILLI ? "MM" : "M"));
-            var heatUnit = siUnits
-                .Where(u => u.UnitType == IfcUnitEnum.ENERGYUNIT).FirstOrDefault();
-            heat = heatUnit == null ? heat : (heatUnit.Prefix == IfcSIPrefix.KILO ? "KJ" : "J");
-            var temperUnit = siUnits
-                .Where(u => u.UnitType == IfcUnitEnum.THERMODYNAMICTEMPERATUREUNIT).FirstOrDefault();
-            temper = temperUnit == null ? temper : "C";
-            _mctStore.SetUnitSystem(force, length, heat, temper);
+            var ifcForceUnit = siUnits.Where(u => u.UnitType == IfcUnitEnum.FORCEUNIT).FirstOrDefault();
+            var forceUnit = ifcForceUnit == null ? MctForceUnitEnum.N
+                : (ifcForceUnit.Prefix == IfcSIPrefix.KILO ? MctForceUnitEnum.KN : MctForceUnitEnum.N);
+
+            var ifcLengthUnit = siUnits.Where(u => u.UnitType == IfcUnitEnum.LENGTHUNIT).FirstOrDefault();
+            var lengthUnit = ifcLengthUnit == null ? MctLengthUnitEnum.MM
+                : (ifcLengthUnit.Prefix == IfcSIPrefix.CENTI ? MctLengthUnitEnum.CM
+                : (ifcLengthUnit.Prefix == null ? MctLengthUnitEnum.M : MctLengthUnitEnum.MM));
+
+            // Assume temperature unit is Celsius and energy unit is Joule
+            var temperUnit = MctTemperUnitEnum.C;
+            var heatUnit = MctHeatUnitEnum.J;
+            _mctStore.UnitSystem = new MctUnitSystem()
+            {
+                ForceUnit = forceUnit,
+                LengthUnit = lengthUnit,
+                TemperUnit = temperUnit,
+                HeatUnit = heatUnit
+            };
         }
 
-        public void TranslateSteelBoxGirder()
-        {            
+        private void TranslateGirder()
+        {
             var girder = _ifcModel.Instances.OfType<IIfcElementAssembly>()
-                .Where(a => a.PredefinedType == IfcElementAssemblyTypeEnum.GIRDER).FirstOrDefault();
-            // Get properties in property set "GirderCommon" and "SteelBoxSectionDimensions"
-            var properties = girder.IsDefinedBy
-                .Where(r => r.RelatingPropertyDefinition is IIfcPropertySet) 
-                //&& ((IIfcPropertySet)r.RelatingPropertyDefinition).Name == "GirderCommon" 
-                //&& ((IIfcPropertySet)r.RelatingPropertyDefinition).Name == "SteelBoxSectionDimensions")                                
-                .SelectMany(r => ((IIfcPropertySet)r.RelatingPropertyDefinition).HasProperties)
-                .OfType<IIfcPropertySingleValue>();
-            var propertiesMap = new Dictionary<string, double>();
-            foreach (var property in properties)
-                propertiesMap[property.Name] = (double)property.NominalValue.Value;
-
-            // Find the axis of this girder from its top flange's geometry representation
-            var axis = girder.IsDecomposedBy.FirstOrDefault().RelatedObjects
-                .Where(o => o is IIfcPlate)
-                .Select(o => ((IIfcPlate)o).Representation.Representations.FirstOrDefault().Items.FirstOrDefault())
-                .Select(s => ((IIfcSectionedSolidHorizontal)s).Directrix).FirstOrDefault();
-            // Find the alignment this alignment curve belongs to,
-            // if its coordinate system is not WCS, do coordinate system transformation
-            var al = _ifcModel.Instances.OfType<IIfcAlignment>()
-                .Where(a => a.Axis == axis)
-                .FirstOrDefault();
-            if (al == null) throw new ArgumentNullException("Corresponding Alignment not found.");
-            var matrix = GeometryEngine.ToMatrix3D(al.ObjectPlacement);
-            // Create element nodes from axis
-            var elementNodes = TranslatorUtils.CreateElementNodes(axis, propertiesMap["StartDistanceAlong"], propertiesMap["SegmentLength"]);
-            if (!matrix.IsIdentity)
-                for (int i = 0; i < elementNodes.Count; ++i)
-                    matrix.Transform(elementNodes[i]);
-
-            // Process steel box section dimensions from the girder
-            var overalDimensions = new List<double>()
+                .Where(ea => ea.PredefinedType == IfcElementAssemblyTypeEnum.GIRDER).FirstOrDefault();
+            if (girder == null)
+                throw new InvalidOperationException("A bridge without superstructure cannot be processed");
+            // parse material
+            var material = girder.Material;
+            var mat = TranslatorUtils.TranslateMaterial((IIfcMaterial)material);
+            _mctStore.AddMateral(mat);
+            // add load case            
+            var loadcase = new MctStaticLoadCase()
             {
-                propertiesMap["B1"], propertiesMap["B2"], propertiesMap["B4"], propertiesMap["B5"],
-                propertiesMap["H"], propertiesMap["t1"], propertiesMap["t2"], propertiesMap["tw1"]
-            };           
-            TranslateSteelBoxSection(girder, overalDimensions);
-
-            // Process material from the girder
-            var mat = (IIfcMaterial)girder.Material;
-            AddMCTObjects(TranslatorUtils.ProcessMaterial(mat));
-
-            // Create elements and nodes for mct
-            for (int i = 0; i < elementNodes.Count; ++i)
+                Name = "施工阶段荷载",
+                LoadCaseType = MctStiticLoadCaseTypeEnum.CS
+            };
+            _mctStore.AddLoadCase(loadcase);
+            var selfWeight = new MctSelfWeight() { Z = -1 };
+            loadcase.AddStaticLoad(selfWeight);
+            // parse directrix
+            PreProcessDirectrix(girder);
+            // parse sections
+            var dimensions = TranslatorUtils.ParseSectionDimensions(girder);
+            SectionCounter = 1;
+            foreach (var positions in _positionsTable)
             {
-                var node = elementNodes[i];
-                AddMCTObjects(new MCTNode(i + 1, node.X, node.Y, node.Z));
-                if (i == 0) continue;
-                AddMCTObjects(new MCTFrameElement(i, mat.EntityLabel, girder.EntityLabel, i, i + 1));
-            }
-        }
+                var nodes = TranslateNodes(positions.Key, positions.Value);
+                _mctStore.AddNode(nodes);
+                var keyPositions = positions.Value.Where(p => p.Value).Select(p => p.Key).ToList();
+                for (int i = 0; i < keyPositions.Count - 1; ++i)
+                {
+                    // parse section
+                    var sec = MakeSectionByPosition(girder, dimensions, keyPositions[i] + (keyPositions[i + 1] - keyPositions[i]) / 2);                    
+                    _mctStore.AddSection(sec);
 
-        private void TranslateSteelBoxSection(IIfcElementAssembly girder, List<double> overalDimensions)
-        {
-            var section = new MCTSteelBoxSection(girder.EntityLabel, girder.Name, overalDimensions);
-
-            // Process flanges and webs and their stiffeners
-            var plates = girder.IsDecomposedBy.FirstOrDefault().RelatedObjects
-                .Where(o => o is IIfcPlate).Select(o => o as IIfcPlate)
-                .Where(p => p.Description == "FLANGE_PLATE" || p.Description == "WEB_PLATE");
-            //.Where(p => p.PredefinedType == IfcPlateTypeEnum.FLANGE_PLATE || p.PredefinedType == IfcPlateTypeEnum.WEB_PLATE) // IFC4x2 feature
-            int plateCode = -1, locationCode = -1;
-            foreach (var plate in plates)
-            {
-                var plateGeometry = plate.Representation.Representations.FirstOrDefault().Items.FirstOrDefault() as IIfcSectionedSolidHorizontal;
-                if (plate.Description == "FLANGE_PLATE" && plateGeometry.CrossSectionPositions.FirstOrDefault().OffsetVertical == 0)                
-                    plateCode = 0; // top flange                
-                else if (plate.Description == "FLANGE_PLATE")
-                {
-                    plateCode = 3; // bottom flange                
-                    locationCode = 1; // stiffeners at center
-                }                                   
-                else if (plateGeometry.CrossSectionPositions.FirstOrDefault().OffsetLateral > 0)
-                {
-                    plateCode = 1; // left web
-                    locationCode = 3;
-                }
-                else
-                {
-                    plateCode = 2; // right web
-                    locationCode = 3;
-                }                    
-                var stiffenerGroups = plate.ConnectedFrom
-                    .Select(c => c.RelatingElement as IIfcMember)
-                    .Where(m => m.Description == "STIFFENING_RIB");
-                foreach (var stiffenerGroup in stiffenerGroups)
-                {
-                    // Determine location
-                    var stiffenerShapes = stiffenerGroup.Representation.Representations.FirstOrDefault().Items;
-                    if (plateCode == 0)
+                    int start = positions.Value.IndexOfKey(keyPositions[i]), end = positions.Value.IndexOfKey(keyPositions[i + 1]);
+                    for (int j = start; j < end; ++j)
                     {
-                        double firstPos = stiffenerShapes.Select(s => s as IIfcSectionedSolidHorizontal).FirstOrDefault().CrossSectionPositions.FirstOrDefault().OffsetLateral.Value;
-                        if (firstPos > overalDimensions[1] / 2)
-                            locationCode = 0; // top left
-                        else if (firstPos > -overalDimensions[1] / 2)
-                            locationCode = 1; // top center
-                        else
-                            locationCode = 2; // top right
-                    }
-
-                    // Get stiffener dimensions
-                    var stiffDimensions = stiffenerGroup.IsDefinedBy
-                        .Where(r => r.RelatingPropertyDefinition is IIfcPropertySet)
-                        .SelectMany(r => ((IIfcPropertySet)r.RelatingPropertyDefinition).HasProperties)
-                        .OfType<IIfcPropertySingleValue>()
-                        .Select(p => (double)p.NominalValue.Value).ToList();
-                    MCTStiffener stiff = null;
-                    foreach (var stiffener in _stiffeners)
-                    {
-                        if (stiffener.IsSameStiffener(stiffDimensions))
+                        // parse bearings
+                        var bearingPair = Bearings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == positions.Value.Keys[j]).ToList();
+                        if (bearingPair.Count == 2)
                         {
-                            stiff = stiffener;
-                            break;
+                            var constraints = TranslatorUtils.TranslateBearing(bearingPair);
+                            _mctStore.AddSupport(nodes[j], constraints);
+                        }                    
+                            
+                        // parse bracings
+                        var bracing = Bracings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == positions.Value.Keys[j]).FirstOrDefault();
+                        if (bracing != null)
+                        {
+                            var bracingLoadZ = TranslatorUtils.TranslateBracing(bracing, mat);
+                            loadcase.AddNodalLoad(nodes[j], new List<double>() { 0, 0, -bracingLoadZ, 0, 0, 0 });
                         }
-                    }
-                    if (stiff == null)
-                    {
-                        stiff = new MCTStiffener(stiffenerGroup.Name, stiffDimensions);
-                        _stiffeners.Add(stiff);
-                    }
-                    section.Stiffen(stiff);
-                    var layout = new MCTStiffeningLayout((MCTStiffenedPlateType)plateCode, (MCTStiffenedLocation)locationCode);
-                    double refPos = 0;
-                    if (plateCode == 3)
-                        refPos = overalDimensions[3] / 2; // B5 / 2
-                    else if (plateCode == 1 || plateCode == 2)
-                        refPos = 0; // for web
-                    else if (locationCode == 0)
-                        refPos = overalDimensions[0] + overalDimensions[1] / 2; // B1 + B2 / 2
-                    else if (locationCode == 1)
-                        refPos = overalDimensions[1] / 2; // B2 / 2
-                    else
-                        refPos = -overalDimensions[1] / 2; // -B2 / 2
-                    foreach (var stiffener in stiffenerShapes)
-                    {
-                        double dist = refPos - ((IIfcSectionedSolidHorizontal)stiffener).CrossSectionPositions.FirstOrDefault().OffsetLateral.Value;
-                        layout.Stiffen(dist, stiff.Name);
-                        refPos -= dist;
-                    }
-                    section.Stiffen(layout);
+
+                        // create elements 
+                        var element = new MctFrameElement()
+                        {
+                            Id = j + 1,
+                            Mat = mat,
+                            Sec = sec,
+                            Type = MctElementTypeEnum.BEAM,
+                            Node1 = nodes[j],
+                            Node2 = nodes[j + 1]
+                        };
+                        _mctStore.AddElement(element);
+                    }                    
                 }
-            }
-            AddMCTObjects(section);
+            }                
         }
 
-        public void AddMCTObjects(MCTRoot obj)
+        private List<MctNode> TranslateNodes(int label, SortedList<double, bool> positions)
         {
-            _mctStore.AddObject(obj);
-        }
+            // not implemented
+            var coordinates = positions.Select(p => p.Key).ToList();
+            var nodes = TranslatorUtils.TranslateNodes((IIfcCurve)_ifcModel.Instances[label], coordinates);
+            return nodes;
+        }               
 
-        public void WriteMCTFile(string path)
+        private void PreProcessDirectrix(IIfcElementAssembly girder)
         {
-            _mctStore.WriteMCTFile(path);
-        }
-    }
-
-    public class TranslatorUtils
-    {
-        const double MESHSIZE = 2000;
-        const double TOLORANCE = 1e-3;
-
-        public static List<XbimPoint3D> CreateElementNodes(IIfcCurve c, double start, double length)
-        {
-            var ret = new List<XbimPoint3D>();
-            if (c is IIfcAlignmentCurve curve)
+            const int MESHSIZE = 3000;
+            var plateAssemblies = girder.IsDecomposedBy.FirstOrDefault().RelatedObjects
+                .Where(o => o is IIfcElementAssembly ea && (ea.ObjectType == "FLANGE_ASSEMBLY" || ea.ObjectType == "WEB_ASSEMBLY"))
+                .Select(o => (IIfcElementAssembly)o);
+            foreach (var plateAssembly in plateAssemblies)
             {
-                var zAxis = new XbimVector3D(0, 0, 1);
-                var hor = curve.Horizontal.Segments;
-                var ver = curve.Vertical.Segments;
-                int num = (int)(length / MESHSIZE);
-                double rest = length - num * MESHSIZE;
-                if (rest >= MESHSIZE / 2 + TOLORANCE)
-                    ++num;
-                for (int i = 0; i <= num; ++i)
+                var plates = plateAssembly.IsDecomposedBy.FirstOrDefault().RelatedObjects
+                    .Where(o => o is IIfcPlate)
+                    .Select(o => (IIfcPlate)o);
+                foreach (var plate in plates)
+                    PreProcessDirectrix(plate);
+                var stiffenerAssemblies = plateAssembly.IsDecomposedBy.FirstOrDefault().RelatedObjects
+                    .Where(o => o is IIfcElementAssembly ea && ea.ObjectType == "STIFFENER_ASSEMBLY");
+                foreach (var stiffenerAssembly in stiffenerAssemblies)
                 {
-                    double dist = start + (i < num ? MESHSIZE * i : length);
-                    var pt = GeometryEngine.GetPointByDistAlong(hor, start + dist).pt;
-                    double elev = GeometryEngine.GetElevByDistAlong(ver, dist);
-                    ret.Add(pt + zAxis * elev);
+                    var stiffeners = stiffenerAssembly.IsDecomposedBy.FirstOrDefault().RelatedObjects
+                        .Where(o => o is IIfcMember m && m.ObjectType == "STIFFENING_RIB")
+                        .Select(o => (IIfcMember)o);
+                    foreach (var stiffener in stiffeners)
+                        PreProcessDirectrix(stiffener);
                 }
-                return ret;
             }
-            throw new NotImplementedException("Other curve types as alignment not supported for now.");
+
+            Bracings = girder.IsDecomposedBy.FirstOrDefault().RelatedObjects
+                .Where(o => o is IIfcElementAssembly ea && ea.ObjectType == "CROSS_BRACING")
+                .Select(o => (IIfcElementAssembly)o).ToList();
+            foreach (var bracing in Bracings)
+                PreProcessDirectrix((IIfcLinearPlacement)bracing.ObjectPlacement);
+            
+            foreach (var bearing in Bearings)
+                PreProcessDirectrix((IIfcLinearPlacement)bearing.ObjectPlacement);
+
+            // TODO
+            // Adjust the mesh
         }
 
-        public static MCTSection ProcessProfile(IIfcProfileDef p)
+        // Add positions at where section changes
+        private void PreProcessDirectrix(IIfcBuildingElement linearBuildingElement)
         {
-            if (p is IIfcAsymmetricIShapeProfileDef iShape)
-                return ProcessProfile(iShape);
-            if (p is IIfcArbitraryClosedProfileDef aP)
-                return ProcessProfile(aP);
-            throw new NotImplementedException("Other profile types not supported for now.");
+            var sectionedSolid = linearBuildingElement.Representation.Representations[0].Items
+                .Where(i => i is IIfcSectionedSolidHorizontal)
+                .Select(i => (IIfcSectionedSolidHorizontal)i).FirstOrDefault();
+            int id = sectionedSolid.Directrix.EntityLabel;
+            double d = sectionedSolid.CrossSectionPositions[0].DistanceAlong;
+            PushPosition(id, d, true);
+            d= sectionedSolid.CrossSectionPositions[1].DistanceAlong;
+            PushPosition(id, d, true);
         }
 
-        private static MCTHSection ProcessProfile(IIfcAsymmetricIShapeProfileDef p)
+        // Add positions where load or constraint are imposed
+        private void PreProcessDirectrix(IIfcLinearPlacement lp)
         {
-            int label = p.EntityLabel;
-            var topFiR = p.TopFlangeFilletRadius;
-            var topEdR = p.TopFlangeEdgeRadius;
-            double r1 = topFiR == null ? 0 : topFiR.Value;
-            double r2 = topEdR == null ? 0 : topEdR.Value;
-            var IProfileParams = new List<double>()
+            if (lp == null) return;
+            int id = lp.PlacementRelTo.EntityLabel;
+            double d = lp.Distance.DistanceAlong;
+            PushPosition(id, d, false);
+        }
+
+        private void PushPosition(int id, double d, bool isSectionChanged)
+        {
+            if (!_positionsTable[id].ContainsKey(d))
+                _positionsTable[id].Add(d, isSectionChanged);
+        }
+
+        private MctSectionSTLB MakeSectionByPosition(IIfcElementAssembly girder, List<double> dims, double distanceAlong)
+        {
+            var dimensions = new List<double>(dims);
+            var plateSolids = TranslatorUtils.ParseBoxPlateSolids(girder);
+            for (int i = 0; i < _boxPlatesNum; ++i)
             {
-                (double)p.OverallDepth.Value,
-                (double)p.TopFlangeWidth.Value,
-                (double)p.WebThickness.Value,
-                (double)p.TopFlangeThickness.Value,
-                (double)p.BottomFlangeWidth.Value,
-                (double)p.BottomFlangeThickness.Value,
-                r1,
-                r2
-            };
-            return new MCTHSection(label, string.Format("HSEC-{0}", label), IProfileParams);
-        }
-
-        public static MCTMaterial ProcessMaterial(IIfcMaterial mat)
-        {
-            var mp = new Dictionary<string, double>();
-            foreach (var p_set in mat.HasProperties)
-            {
-                foreach (var p in p_set.Properties)
+                if (i == 2) continue;
+                for (int j = 0; j < plateSolids[i].Count; ++j)
                 {
-                    if (p is IIfcPropertySingleValue pv && pv.NominalValue != null)
-                        mp[pv.Name.ToString()] = (double)pv.NominalValue.Value;
-                }
+                    if (plateSolids[i][j].CrossSectionPositions[1].DistanceAlong >= distanceAlong)
+                    {
+                        if (plateSolids[i][j].CrossSections[0] is IIfcCenterLineProfileDef clp)
+                            dimensions.Add(clp.Thickness);
+                        break;
+                    }                        
+                }                    
             }
-            int matId = mat.EntityLabel;
-            var matType = mat.Category == "Steel" ? MatType.STEEL : MatType.CONC;
-            var matName = string.Format("{0}-{1}", mat.Name, matId);
-            // If no pset_properties provided, default material will be set.
-            if (!mp.Any()) return new MCTMaterial(matId, matType, matName);
-
-            if (!mp.ContainsKey("PoissonRatio") && mp.ContainsKey("YoungModulus")
-                && mp.ContainsKey("ShearModulus"))
-                mp["PoissonRatio"] = mp["YoungModulus"] / (2 * mp["ShearModulus"]) - 1;
-            else if (!mp.ContainsKey("PoissonRatio"))
-                mp["PoissonRatio"] = 0;
-            var DATA1 = new List<double>()
+            // TODO
+            // add stiffeners
+                
+            
+            var sec = new MctSectionSTLB(dimensions)
             {
-                mp["YoungModulus"],
-                mp["PoissonRatio"],
-                mp["ThermalExpansionCoefficient"],
-                mp["MassDensity"]
+                Id = SectionCounter,
+                Name = $"STLB{SectionCounter}"
             };
-            return new MCTMaterial(matId, matType, matName, DATA1);
-        }
+            SectionCounter++;
+            return sec;
+        }                       
     }
+    
 }

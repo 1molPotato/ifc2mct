@@ -100,9 +100,7 @@ namespace ifc2mct.MctFactory.Models
                 Bot = (B1 + B2 / 2) - (B4 + B5 / 2) > 0 ? (B1 + B2 / 2) - (B4 + B5 / 2) : 0;
                 IsSYM = true;
             }
-        }
-
-        
+        }        
 
         public override string ToString()
         {
@@ -154,30 +152,29 @@ namespace ifc2mct.MctFactory.Models
         }
     }
 
-
     public enum MctStiffenedPlateTypeEnum
     {
         TOP_FLANGE = 0, LEFT_WEB, RIGHT_WEB, BOT_FLANGE
     }
-    public enum MctStiffenedLocationEnum
+    public enum MctStiffenerLocationEnum
     {
         LEFT = 0, CENTER, RIGHT, WEB
     }
-    public enum MctStiffenedRefPointEnum
+    public enum MctStiffenerRefPointEnum
     {
         TOP_LEFT = 0, BOT_RIGHT
     }
     public class MctStiffenerLayoutSTL
     {
         public MctStiffenedPlateTypeEnum StiffenedPlate { get; set; }
-        public MctStiffenedLocationEnum StiffenedLocation { get; set; }
-        public MctStiffenedRefPointEnum RefPoint { get; set; }
+        public MctStiffenerLocationEnum StiffenedLocation { get; set; }
+        public MctStiffenerRefPointEnum RefPoint { get; set; }
         public string LocationName { get; set; }
         protected readonly List<MctStiffenerSTL> _stiffeners = new List<MctStiffenerSTL>();
 
         public override string ToString()
         {
-            int stiffenedLocation = StiffenedLocation == MctStiffenedLocationEnum.WEB ? 0 : (int)StiffenedLocation;
+            int stiffenedLocation = StiffenedLocation == MctStiffenerLocationEnum.WEB ? 0 : (int)StiffenedLocation;
             string ret = string.Format($",{(int)StiffenedPlate},{stiffenedLocation},{LocationName}" +
                 $",{(int)RefPoint},{_stiffeners.Count},{_stiffeners.Count}");
             foreach (var stiffener in _stiffeners)
@@ -222,9 +219,9 @@ namespace ifc2mct.MctFactory.Models
             string name = StiffenedPlate == MctStiffenedPlateTypeEnum.TOP_FLANGE ? "T"
                     : (StiffenedPlate == MctStiffenedPlateTypeEnum.BOT_FLANGE ? "B"
                     : (StiffenedPlate == MctStiffenedPlateTypeEnum.LEFT_WEB ? "LW" : "RW"));
-            name += StiffenedLocation == MctStiffenedLocationEnum.LEFT ? "L"
-                : (StiffenedLocation == MctStiffenedLocationEnum.CENTER ? "C"
-                : (StiffenedLocation == MctStiffenedLocationEnum.RIGHT ? "R" : ""));
+            name += StiffenedLocation == MctStiffenerLocationEnum.LEFT ? "L"
+                : (StiffenedLocation == MctStiffenerLocationEnum.CENTER ? "C"
+                : (StiffenedLocation == MctStiffenerLocationEnum.RIGHT ? "R" : ""));
             return name;
         }
         

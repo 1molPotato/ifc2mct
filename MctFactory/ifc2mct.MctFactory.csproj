@@ -42,7 +42,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MctFactory.cs" />
-    <Compile Include="MCTStore.cs" />
     <Compile Include="Models\MctElement.cs" />
     <Compile Include="Models\MctLoad.cs" />
     <Compile Include="Models\MctMaterial.cs" />
@@ -52,18 +51,6 @@
     <Compile Include="Models\MctStaticLoadCase.cs" />
     <Compile Include="Models\MctSupport.cs" />
     <Compile Include="Models\MctUnitSystem.cs" />
-    <Compile Include="Model\MCTElement.cs" />
-    <Compile Include="Model\MCTFrameElement.cs" />
-    <Compile Include="Model\MCTHSection.cs" />
-    <Compile Include="Model\MCTMaterial.cs" />
-    <Compile Include="Model\MCTNode.cs" />
-    <Compile Include="Model\MCTRoot.cs" />
-    <Compile Include="Model\MCTSection.cs" />
-    <Compile Include="Model\MCTSectPSCValue.cs" />
-    <Compile Include="Model\MCTSteelBoxSection.cs" />
-    <Compile Include="Model\MCTStiffeningLayout.cs" />
-    <Compile Include="Model\MCTStiffner.cs" />
-    <Compile Include="Model\MCTUnit.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

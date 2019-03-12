@@ -65,15 +65,6 @@ namespace ifc2mct.Tests
         //
         #endregion
 
-        //[TestMethod]
-        //public void BuildModelTest()
-        //{
-        //    const string PATH = "../../TestFiles/test.ifc";
-        //    var builder = new BridgeBuilder(PATH);
-        //    builder.Run();
-        //    Assert.IsTrue(File.Exists(PATH));
-        //}
-
         [TestMethod]
         public void BuildBridgeTest()
         {
@@ -127,7 +118,7 @@ namespace ifc2mct.Tests
             };
             var bearingList = new List<(double distanceAlong, double offsetLateral, int bearingTypeId)>()
             {
-                (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71752, 1400, 3), (71752, -1900, 4)
+                (590, 1300, 3), (590, -1700, 4), (36000, 1500, 1), (36000, -1500, 2), (71712, 1400, 3), (71712, -1900, 4)
             };
 
             // cross bracing
@@ -459,7 +450,6 @@ namespace ifc2mct.Tests
             dir = GeometryEngine.ToVector3D(13.35833333);
             r = 9279;
             expected = new XbimPoint3D(2945.13464253837, 216.386895560319, 0);
-
         }
 
         [TestMethod]

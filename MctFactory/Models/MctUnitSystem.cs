@@ -31,7 +31,7 @@ namespace ifc2mct.MctFactory.Models
 
         public override string ToString()
         {
-            return "*UNIT    ; Unit System\n; FORCE, LENGTH, HEAT, TEMPER\n" +
+            return "*UNIT\t; Unit System\n; FORCE, LENGTH, HEAT, TEMPER\n" +
                 $"{ForceUnit},{LengthUnit},{HeatUnit},{TemperUnit}";
         }
     }

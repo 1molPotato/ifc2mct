@@ -62,6 +62,19 @@ namespace ifc2mct.MctFactory
             _supports.Add(support);
         }
 
+        public void AddSupport(MctNode node, List<bool> constraints)
+        {
+            foreach (var support in _supports)
+            {
+                if (support is MctCommonSupport cs && cs.IsSameBearingType(constraints))
+                {
+                    cs.AddNode(node);
+                    return;
+                }                    
+            }
+            AddSupport(new MctCommonSupport(new List<MctNode>() { node }, constraints));
+        }
+
         //public void AddLoad(MctLoad load)
         //{
         //    _loads.Add(load);
@@ -72,46 +85,74 @@ namespace ifc2mct.MctFactory
             _loadCases.Add(loadCase);
         }
 
+        // Access
+        public MctMaterial RetrieveMaterial(int id)
+        {
+            if (_materials.ContainsKey(id))
+                return _materials[id];
+            throw new ArgumentException($"Material with id {id} doesn't exist");
+        }
+
         public void WriteMctFile(string path)
         {
             using (var sw = new StreamWriter(path, false, Encoding.GetEncoding("GB2312")))
             {
-                string head = "";
+                string head = ";--------------------------------------\n" +
+                    ";\tMIDAS/Civil Text(MCT) File\n" +
+                    $";\tDate/Time : {DateTime.Now}\n" +
+                    ";\tProduced by : ifc2mct.MctFactory\n" +
+                    ";\tAuthor : lyu kaiyuan\n" +
+                    ";--------------------------------------";
+                sw.WriteLine(head);
                 sw.WriteLine(UnitSystem);
 
-                head = "\n*NODE    ; Nodes\n; iNO, X, Y, Z";
+                head = "\n*NODE\t; Nodes\n; iNO, X, Y, Z";
                 sw.WriteLine(head);
                 foreach (var node in _nodes)
                     sw.WriteLine(node.Value);
 
-                head = "\n*ELEMENT    ; Elements";
+                head = "\n*ELEMENT\t; Elements";
                 sw.WriteLine(head);
                 foreach (var element in _elements)
                     sw.WriteLine(element.Value);
 
-                head = "\n*MATERIAL    ; Materials";
+                head = "\n*MATERIAL\t; Materials";
                 sw.WriteLine(head);
                 foreach (var mat in _materials)
                     sw.WriteLine(mat.Value);
 
-                head = "\n*SECTION    ; Sections";
+                head = "\n*SECTION\t; Sections";
                 sw.WriteLine(head);
                 foreach (var sec in _sections)
                     sw.WriteLine(sec.Value);
 
                 var commonSupports = _supports.OfType<MctCommonSupport>().ToList();
-                head = "\n*CONSTRAINT    ; Supports";
+                head = "\n*CONSTRAINT\t; Supports";
                 sw.WriteLine(head);                
                 foreach (var support in commonSupports)
                     sw.WriteLine(support);
 
-                head = "\n*STLDCASE    ; Static Load Cases\n; LCNAME, LCTYPE, DESC";
+                head = "\n*STLDCASE\t; Static Load Cases\n; LCNAME, LCTYPE, DESC";
                 sw.WriteLine(head);
                 foreach (var loadCase in _loadCases)
                     sw.WriteLine($"{loadCase.Name},{loadCase.LoadCaseType},{loadCase.Description}");
                 foreach (var loadCase in _loadCases)
                     sw.WriteLine(loadCase);
+
+                sw.WriteLine("\n*ENDDATA");
             }
         }
+    }
+
+    public class MctModelBuilder
+    {
+        
+
+        public static MctNode MakeNode(long id, double x, double y, double z)
+        {
+            return new MctNode(id, x, y, z);
+        }
+
+        
     }
 }

@@ -110,6 +110,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TranslatorUtils.cs" />
     <Compile Include="Worker.cs" />
   </ItemGroup>
   <ItemGroup>

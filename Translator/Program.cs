@@ -10,8 +10,9 @@ namespace ifc2mct.Translator
     {
         
         static void Main(string[] args)
-        {            
-            // empty
+        {
+            const string PATH = "../../../Tests/TestFiles/sectioned-spine.ifc";
+            var worker = new Worker(PATH);
         }
     }
 }
