@@ -5,19 +5,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using ifc2mct.BridgeFactory;
 using ifc2mct.MctFactory;
 using ifc2mct.MctFactory.Models;
 using Xbim.Common.Geometry;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
 using Xbim.Ifc4.MeasureResource;
+using ifc2mct.Utilities;
 
 namespace ifc2mct.Translator
 {    
     public class Worker
     {
-        private readonly double _boxPlatesNum = 4;
         private readonly IfcStore _ifcModel;
         private readonly MctStore _mctStore = new MctStore();        
         private readonly Dictionary<int, SortedList<double, bool>> _positionsTable = new Dictionary<int, SortedList<double, bool>>();
@@ -46,13 +45,14 @@ namespace ifc2mct.Translator
         {
             try
             {
-                TranslateGirder();                
+                TranslateGirder();
             }
             catch (Exception)
             {
 
                 throw;
             }
+            //TranslateGirder();
         }
         
         public void WriteMctFile(string path)
@@ -129,7 +129,7 @@ namespace ifc2mct.Translator
                 throw new InvalidOperationException("A bridge without superstructure cannot be processed");
             // parse material
             var material = girder.Material;
-            var mat = TranslatorUtils.TranslateMaterial((IIfcMaterial)material);
+            var mat = TranslatorHelper.TranslateMaterial((IIfcMaterial)material);
             _mctStore.AddMateral(mat);
             // add load case            
             var loadcase = new MctStaticLoadCase()
@@ -143,61 +143,56 @@ namespace ifc2mct.Translator
             // parse directrix
             PreProcessDirectrix(girder);
             // parse sections
-            var dimensions = TranslatorUtils.ParseSectionDimensions(girder);
-            SectionCounter = 1;
+            var dimensions = TranslatorHelper.ParseSectionDimensions(girder);
+            int sectionCounter = 1;
             foreach (var positions in _positionsTable)
             {
-                var nodes = TranslateNodes(positions.Key, positions.Value);
-                _mctStore.AddNode(nodes);
-                var keyPositions = positions.Value.Where(p => p.Value).Select(p => p.Key).ToList();
-                for (int i = 0; i < keyPositions.Count - 1; ++i)
+                var coordinates = positions.Value.Select(p => p.Key).ToList();
+                var nodes = TranslatorHelper.TranslateNodes((IIfcCurve)_ifcModel.Instances[positions.Key], coordinates);
+                _mctStore.AddNode(nodes);                
+                int nodeNum = positions.Value.Keys.Count;
+                MctSection sec = null;
+                for (int i = 0; i < nodeNum - 1; ++i)
                 {
-                    // parse section
-                    var sec = MakeSectionByPosition(girder, dimensions, keyPositions[i] + (keyPositions[i + 1] - keyPositions[i]) / 2);                    
-                    _mctStore.AddSection(sec);
-
-                    int start = positions.Value.IndexOfKey(keyPositions[i]), end = positions.Value.IndexOfKey(keyPositions[i + 1]);
-                    for (int j = start; j < end; ++j)
+                    double currentPos = positions.Value.Keys[i], nextPos = positions.Value.Keys[i + 1];
+                    bool isSectionChanged = positions.Value.Values[i];
+                    if (isSectionChanged)
                     {
-                        // parse bearings
-                        var bearingPair = Bearings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == positions.Value.Keys[j]).ToList();
-                        if (bearingPair.Count == 2)
-                        {
-                            var constraints = TranslatorUtils.TranslateBearing(bearingPair);
-                            _mctStore.AddSupport(nodes[j], constraints);
-                        }                    
-                            
-                        // parse bracings
-                        var bracing = Bracings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == positions.Value.Keys[j]).FirstOrDefault();
-                        if (bracing != null)
-                        {
-                            var bracingLoadZ = TranslatorUtils.TranslateBracing(bracing, mat);
-                            loadcase.AddNodalLoad(nodes[j], new List<double>() { 0, 0, -bracingLoadZ, 0, 0, 0 });
-                        }
+                        sec = TranslatorHelper.TranslateSectionSTLB(girder, dimensions, currentPos + (nextPos - currentPos) / 2, sectionCounter);
+                        _mctStore.AddSection(sec);
+                        sectionCounter++;
+                    }
+                    
+                    // parse bearings
+                    var bearingPair = Bearings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == currentPos).ToList();
+                    if (bearingPair.Count == 2)
+                    {
+                        var constraints = TranslatorHelper.TranslateBearing(bearingPair);
+                        _mctStore.AddSupport(nodes[i], constraints);
+                    }
 
-                        // create elements 
-                        var element = new MctFrameElement()
-                        {
-                            Id = j + 1,
-                            Mat = mat,
-                            Sec = sec,
-                            Type = MctElementTypeEnum.BEAM,
-                            Node1 = nodes[j],
-                            Node2 = nodes[j + 1]
-                        };
-                        _mctStore.AddElement(element);
-                    }                    
+                    // parse bracings
+                    var bracing = Bracings.Where(b => b.ObjectPlacement is IIfcLinearPlacement lp && lp.Distance.DistanceAlong == currentPos).FirstOrDefault();
+                    if (bracing != null)
+                    {
+                        var bracingLoadZ = TranslatorHelper.TranslateBracing(bracing, mat);
+                        loadcase.AddNodalLoad(nodes[i], new List<double>() { 0, 0, -bracingLoadZ, 0, 0, 0 });
+                    }
+                    
+                    // create elements 
+                    var element = new MctFrameElement()
+                    {
+                        Id = i + 1,
+                        Mat = mat,
+                        Sec = sec,
+                        Type = MctElementTypeEnum.BEAM,
+                        Node1 = nodes[i],
+                        Node2 = nodes[i + 1]
+                    };
+                    _mctStore.AddElement(element);
                 }
             }                
-        }
-
-        private List<MctNode> TranslateNodes(int label, SortedList<double, bool> positions)
-        {
-            // not implemented
-            var coordinates = positions.Select(p => p.Key).ToList();
-            var nodes = TranslatorUtils.TranslateNodes((IIfcCurve)_ifcModel.Instances[label], coordinates);
-            return nodes;
-        }               
+        }              
 
         private void PreProcessDirectrix(IIfcElementAssembly girder)
         {
@@ -263,37 +258,7 @@ namespace ifc2mct.Translator
         {
             if (!_positionsTable[id].ContainsKey(d))
                 _positionsTable[id].Add(d, isSectionChanged);
-        }
-
-        private MctSectionSTLB MakeSectionByPosition(IIfcElementAssembly girder, List<double> dims, double distanceAlong)
-        {
-            var dimensions = new List<double>(dims);
-            var plateSolids = TranslatorUtils.ParseBoxPlateSolids(girder);
-            for (int i = 0; i < _boxPlatesNum; ++i)
-            {
-                if (i == 2) continue;
-                for (int j = 0; j < plateSolids[i].Count; ++j)
-                {
-                    if (plateSolids[i][j].CrossSectionPositions[1].DistanceAlong >= distanceAlong)
-                    {
-                        if (plateSolids[i][j].CrossSections[0] is IIfcCenterLineProfileDef clp)
-                            dimensions.Add(clp.Thickness);
-                        break;
-                    }                        
-                }                    
-            }
-            // TODO
-            // add stiffeners
-                
-            
-            var sec = new MctSectionSTLB(dimensions)
-            {
-                Id = SectionCounter,
-                Name = $"STLB{SectionCounter}"
-            };
-            SectionCounter++;
-            return sec;
-        }                       
+        }                     
     }
     
 }

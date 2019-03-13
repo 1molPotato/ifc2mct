@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Xbim.Essentials" Version="5.0.213" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MctFactory\ifc2mct.MctFactory.csproj" />
+  </ItemGroup>
+
+</Project>
