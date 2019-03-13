@@ -23,5 +23,19 @@ namespace ifc2mct.Tests
             }
             Assert.IsTrue(File.Exists(OUTPUT));
         }
+
+        [TestMethod]
+        public void TranslateDoubleBoxGirderTest()
+        {
+            const string PATH = "../../TestFiles/double-box-girder-2.ifc";
+            const string OUTPUT = "../../TestFiles/double-box-girder-test.mct";
+            using (var model = IfcStore.Open(PATH))
+            {
+                var worker = new Worker(model);
+                worker.Run();
+                worker.WriteMctFile(OUTPUT);
+            }
+            Assert.IsTrue(File.Exists(OUTPUT));
+        }
     }
 }

@@ -119,6 +119,7 @@
     <Compile Include="MctFactoryTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TranslatorTest.cs" />
+    <Compile Include="GeometryEngineTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -144,6 +145,10 @@
     <ProjectReference Include="..\BridgeFactory\ifc2mct.BridgeFactory.csproj">
       <Project>{5d100460-7376-4539-9cd2-e96e8ccced86}</Project>
       <Name>ifc2mct.BridgeFactory</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ifc2mct.Utilities\ifc2mct.Utilities.csproj">
+      <Project>{ef8b6a3a-b975-4a06-b598-b5746064f408}</Project>
+      <Name>ifc2mct.Utilities</Name>
     </ProjectReference>
     <ProjectReference Include="..\Translator\ifc2mct.Translator.csproj">
       <Project>{cc7a30d0-93e5-40c0-b406-c8fe8fb85fcb}</Project>

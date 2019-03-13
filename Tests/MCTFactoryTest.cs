@@ -29,7 +29,7 @@ namespace ifc2mct.Tests
             mct.AddNode(nodes);
 
             // Add material
-            var mat = new MctMaterialDB()
+            var mat = new MctMaterialDb()
             {
                 Id = 1, Name = "q345", Db = "GB12(S)", Code = "Q345", Type = MctMaterialTypeEnum.STEEL
             };
@@ -103,7 +103,7 @@ namespace ifc2mct.Tests
                 SectionName = "HW 300x305x15/15",
                 IsDb = true
             };
-            string expected = "1,DBUSER,I-shape,CC,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15";
+            string expected = "1,DBUSER,I-shape,CT,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15";
             string actual = sec.ToString();
             Assert.AreEqual(expected, actual);
         }
@@ -117,7 +117,7 @@ namespace ifc2mct.Tests
             };
             var loadCase = new MctStaticLoadCase() { LoadCaseType = MctStiticLoadCaseTypeEnum.CS, Name = "case1" };
             loadCase.AddStaticLoad(load);
-            string expected = "\n*USE-STLD,case1\n" +
+            string expected = "\n*USE-STLD,case1\n\n" +
                 "*CONLOAD    ; Nodal Loads\n" +
                 "; NODE_LIST, FX, FY, FZ, MX, MY, MZ, GROUP\n1 ,0,0,-100,0,0,0,";
             string actual = loadCase.ToString();
@@ -141,7 +141,7 @@ namespace ifc2mct.Tests
         [TestMethod]
         public void MctMaterialDBTest()
         {
-            var mat = new MctMaterialDB()
+            var mat = new MctMaterialDb()
             {
                 Id = 1,
                 Name = "q345",
@@ -192,15 +192,15 @@ namespace ifc2mct.Tests
                 Id = 39, Name = "SW3-SW4", IsSD = true
             };
             // Add stiffener types
-            sec.AddStiffenerType("flat1", MctStiffenerTypeEnum.FLAT, new List<double>() { 190, 16 });
-            string expected = "39,SOD,SW3-SW4,CC,0,0,0,0,0,0,YES,NO,SOD-B\n" +
+            sec.AddRibType("flat1", MctRibTypeEnum.FLAT, new List<double>() { 190, 16 });
+            string expected = "39,SOD,SW3-SW4,CT,0,0,0,0,0,0,YES,NO,SOD-B\n" +
                 "YES,1750,6400,1750,50,6000,50,2000,16,16,14,14,0,1900\n" +
                 "1,flat1,0,190,16,,,,,,\n" +
                 "0";
             string actual = sec.ToString();
             Assert.AreEqual(expected, actual);
-            sec.AddStiffenerType("u2", MctStiffenerTypeEnum.USHAPE, new List<double>() { 280, 300, 170, 8, 40 });
-            expected = "39,SOD,SW3-SW4,CC,0,0,0,0,0,0,YES,NO,SOD-B\n" +
+            sec.AddRibType("u2", MctRibTypeEnum.USHAPE, new List<double>() { 280, 300, 170, 8, 40 });
+            expected = "39,SOD,SW3-SW4,CT,0,0,0,0,0,0,YES,NO,SOD-B\n" +
                 "YES,1750,6400,1750,50,6000,50,2000,16,16,14,14,0,1900\n" +
                 "2,flat1,0,190,16,,,,,,,u2,2,280,300,170,8,40,,,\n" +
                 "0";
@@ -208,40 +208,40 @@ namespace ifc2mct.Tests
             Assert.AreEqual(expected, actual);
 
             // Add stiffener layout
-            var layout = new MctStiffenerLayoutSTL()
+            var layout = new MctRibLayoutSTL()
             {
                 StiffenedPlate = MctStiffenedPlateTypeEnum.TOP_FLANGE,
-                StiffenedLocation = MctStiffenerLocationEnum.CENTER,
+                StiffenedLocation = MctRibLocationEnum.CENTER,
                 LocationName = "上-中",
-                RefPoint = MctStiffenerRefPointEnum.TOP_LEFT                
+                RefPoint = MctRibRefPointEnum.TOP_LEFT                
             };
             var gapGroups = new List<(int, double)>()
             {
                 (1, 500), (2, 600)
             };
-            layout.AddStiffener(gapGroups, sec.StiffenerTypeByName("u2"), MctStiffenerDirectionEnum.DOWNWARD);
+            layout.AddRib(gapGroups, sec.StiffenerTypeByName("u2"), MctRibDirectionEnum.DOWNWARD);
             sec.AddStiffenerLayout(layout);
-            expected = "39,SOD,SW3-SW4,CC,0,0,0,0,0,0,YES,NO,SOD-B\n" +
+            expected = "39,SOD,SW3-SW4,CT,0,0,0,0,0,0,YES,NO,SOD-B\n" +
                 "YES,1750,6400,1750,50,6000,50,2000,16,16,14,14,0,1900\n" +
                 "2,flat1,0,190,16,,,,,,,u2,2,280,300,170,8,40,,,\n" +
                 "1,0,1,上-中,0,3,3,YES,500,u2,1,TC1,YES,600,u2,1,TC2,YES,600,u2,1,TC3";
             actual = sec.ToString();
             Assert.AreEqual(expected, actual);
 
-            layout = new MctStiffenerLayoutSTL()
+            layout = new MctRibLayoutSTL()
             {
                 StiffenedPlate = MctStiffenedPlateTypeEnum.LEFT_WEB,
-                StiffenedLocation = MctStiffenerLocationEnum.WEB,
+                StiffenedLocation = MctRibLocationEnum.WEB,
                 LocationName = "腹板",
-                RefPoint = MctStiffenerRefPointEnum.TOP_LEFT
+                RefPoint = MctRibRefPointEnum.TOP_LEFT
             };
             var gaps = new List<double>()
             {
                 600, 1000
             };
-            layout.AddStiffener(gaps, sec.StiffenerTypeByName("flat1"), MctStiffenerDirectionEnum.RIGHTWARD);
+            layout.AddRib(gaps, sec.StiffenerTypeByName("flat1"), MctRibDirectionEnum.RIGHTWARD);
             sec.AddStiffenerLayout(layout);
-            expected = "39,SOD,SW3-SW4,CC,0,0,0,0,0,0,YES,NO,SOD-B\n" +
+            expected = "39,SOD,SW3-SW4,CT,0,0,0,0,0,0,YES,NO,SOD-B\n" +
                 "YES,1750,6400,1750,50,6000,50,2000,16,16,14,14,0,1900\n" +
                 "2,flat1,0,190,16,,,,,,,u2,2,280,300,170,8,40,,,\n" +
                 "2,0,1,上-中,0,3,3,YES,500,u2,1,TC1,YES,600,u2,1,TC2,YES,600,u2,1,TC3,1,0,腹板,0,2,2,YES,600,flat1,1,LW1,YES,1000,flat1,1,LW2";

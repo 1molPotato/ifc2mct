@@ -1,6 +1,6 @@
 ;--------------------------------------
 ;	MIDAS/Civil Text(MCT) File
-;	Date/Time : 2019/3/11 11:19:29
+;	Date/Time : 2019/3/13 15:42:45
 ;	Produced by : ifc2mct.MctFactory
 ;	Author : lyu kaiyuan
 ;--------------------------------------
@@ -22,7 +22,7 @@ N,MM,CAL,C
 1,STEEL,q345,0,0,,C,NO,0.02,1,GB12(S),,Q345,NO,0
 
 *SECTION	; Sections
-1,DBUSER,I-shape,CC,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15
+1,DBUSER,I-shape,CT,0,0,0,0,0,0,NO,NO,H,1,GB-YB05,HW 300x305x15/15
 
 *CONSTRAINT	; Supports
 1 ,011101,
