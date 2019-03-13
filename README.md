@@ -62,13 +62,22 @@ Currently, [XbimGeometry](https://github.com/xBimTeam/XbimGeometry) library hasn
 </div>
 
 ### Part 2
+Firstly, the **MCT Data Model** was proposed to represent almost all elements in MIDAS/Civil, of which the conceptual model is illustrated below:
 
 <div align=center>
-<img src="./Images/uml-mct-model.png" width="95%" alt="mct-model"/>
+<img src="./Images/uml-mct-model.png" width="90%" alt="mct-model"/>
 </div>
 
+Since **IFC Data Model** and **MCT Data Model** cannot be comprehensively mapped onto each other, the mapping process is inevitably human-interfered. In this project, a specific mapping strategy is taken, which aims to transform data of steel-box-girder bridges from IFC to MCT. The mapping model is shown as below:
+
 <div align=center>
-<img src="./Images/mapping-model.png" width="95%" alt="mct-model"/>
+<img src="./Images/mapping-model.png" width="100%" alt="mapping-model"/>
+</div>
+
+To implement the mapping method presented above, some class libraries and programs were coded. The diagram below shows the basic architecture of **ifc2mct**:
+
+<div align=center>
+<img src="./Images/ifc2mct-translator-architecture.png" width="90%" alt="translator-architecture"/>
 </div>
 
 To be continued..
