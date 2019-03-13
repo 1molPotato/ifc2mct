@@ -32,6 +32,7 @@ namespace ifc2mct.BridgeFactory
         private IfcDirection AxisX2D { get; set; }
         private IfcDirection AxisY2D { get; set; }
         private IfcAxis2Placement2D WCS2D { get; set; }
+        public bool IsStraight { get; set; }
 
         public AlignmentBuilder(string path)
         {
@@ -144,7 +145,11 @@ namespace ifc2mct.BridgeFactory
         {
             // Create spatial element to hold the created alignment
             var site = IfcModelBuilder.CreateSite(m, "场地");
-            IfcAlignment alignment = CreateAlignment(m, "SW匝道道路设计中心线");
+            IfcAlignment alignment = null;
+            if (IsStraight)
+                alignment = CreateStraightAlignment(m, "主线高架道路设计中心线");
+            else
+                alignment = CreateAlignment(m, "SW匝道道路设计中心线");
             //var alignment = CreateStraightAlignment(m, "SW匝道道路设计中心线");
             if (alignment == null)
             {

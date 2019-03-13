@@ -412,7 +412,7 @@ namespace ifc2mct.BridgeFactory
                     var vz = new XbimVector3D(0, 0, 1);
                     double height = ac.Vertical.Segments[0].StartHeight; // assume no slope
                     var horSegs = ac.Horizontal.Segments;
-                    (var pt, var vy) = GeometryEngine.GetPointByDistAlong(horSegs, startDist);                    
+                    (var pt, var vy) = Utilities.GeometryEngine.GetPointByDistAlong(horSegs, startDist);                    
                     var position = pt + vy * offsetLateral + vz * (offsetVertical + height);
                     var vx = vy.CrossProduct(vz);
                     origin = MakeCartesianPoint(m, position.X, position.Y, position.Z);

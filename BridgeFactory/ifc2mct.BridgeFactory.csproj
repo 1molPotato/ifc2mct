@@ -111,12 +111,17 @@
   <ItemGroup>
     <Compile Include="AlignmentBuilder.cs" />
     <Compile Include="BridgeBuilder.cs" />
-    <Compile Include="GeometryEngine.cs" />
     <Compile Include="IfcModelBuilder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ifc2mct.Utilities\ifc2mct.Utilities.csproj">
+      <Project>{ef8b6a3a-b975-4a06-b598-b5746064f408}</Project>
+      <Name>ifc2mct.Utilities</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

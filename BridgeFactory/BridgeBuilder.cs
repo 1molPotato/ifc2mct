@@ -26,7 +26,7 @@ using Xbim.IO;
 
 namespace ifc2mct.BridgeFactory
 {
-    public class BridgeBuilder
+    public class BridgeBuilder : IDisposable
     {
         private readonly string _outputPath = "";
         //private readonly string _projectName = "xx大道立交SW1-SW5匝道";
@@ -543,7 +543,7 @@ namespace ifc2mct.BridgeFactory
             {
                 string assemblyName = plateCode == 0 ? "顶板纵肋" : (plateCode == 3 ? "底板纵肋" : "腹板纵肋");
                 ea.Name = assemblyName;
-                ea.ObjectType = "STIFFENER_ASSEMBLY";
+                ea.ObjectType = "RIB_ASSEMBLY";
                 if (stiffenerList.Any())
                 {
                     dimensionNum = StiffenerTypeTable[stiffenerList[0].typeId].Count;
@@ -1384,6 +1384,11 @@ namespace ifc2mct.BridgeFactory
 
             // Set ptOut
             ptOut = p10;
+        }
+
+        public void Dispose()
+        {
+            //throw new NotImplementedException();
         }
     }
 }
