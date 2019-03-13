@@ -12,12 +12,12 @@ namespace ifc2mct.MctFactory.Models
     }
     public class MctStaticLoadCase
     {
-        private readonly List<MctLoad> _staticLoads = new List<MctLoad>();
+        private readonly List<MctStaticLoad> _staticLoads = new List<MctStaticLoad>();
         public string Name { get; set; }
         public MctStiticLoadCaseTypeEnum LoadCaseType { get; set; }
         public string Description { get; set; }
 
-        public void AddStaticLoad(MctLoad load)
+        public void AddStaticLoad(MctStaticLoad load)
         {
             _staticLoads.Add(load);
         }

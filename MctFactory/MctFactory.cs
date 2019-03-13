@@ -143,16 +143,4 @@ namespace ifc2mct.MctFactory
             }
         }
     }
-
-    public class MctModelBuilder
-    {
-        
-
-        public static MctNode MakeNode(long id, double x, double y, double z)
-        {
-            return new MctNode(id, x, y, z);
-        }
-
-        
-    }
 }

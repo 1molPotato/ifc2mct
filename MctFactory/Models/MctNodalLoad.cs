@@ -6,12 +6,7 @@ using System.Threading.Tasks;
 
 namespace ifc2mct.MctFactory.Models
 {
-    public abstract class MctLoad
-    {
-        // empty
-    }
-
-    public class MctNodalLoad : MctLoad
+    public class MctNodalLoad : MctStaticLoad
     {
         private readonly List<MctNode> _nodes = new List<MctNode>();
         public double Fx { get; set; }
@@ -70,21 +65,6 @@ namespace ifc2mct.MctFactory.Models
                 nodeList += $"{node.Id.ToString()} ";
             string group = "";
             return $"{nodeList},{Fx},{Fy},{Fz},{Mx},{My},{Mz},{group}";
-        }
-    }
-    
-    public class MctSelfWeight : MctLoad
-    {
-        public double X { get; set; }
-        public double Y { get; set; }
-        public double Z { get; set; }
-
-        // *SELFWEIGHT, X, Y, Z, GROUP
-        public override string ToString()
-        {
-            string comment = "; *SELFWEIGHT, X, Y, Z, GROUP";
-            string group = "";
-            return $"{comment}\n*SELFWEIGHT,{X},{Y},{Z},{group}";
         }
     }
 }

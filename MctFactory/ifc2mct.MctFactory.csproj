@@ -42,13 +42,27 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MctFactory.cs" />
+    <Compile Include="Models\MctCommonSupport.cs" />
     <Compile Include="Models\MctElement.cs" />
-    <Compile Include="Models\MctLoad.cs" />
+    <Compile Include="Models\MctFrameElement.cs" />
+    <Compile Include="Models\MctNodalLoad.cs" />
+    <Compile Include="Models\MctSelfWeight.cs" />
+    <Compile Include="Models\MctStaticLoad.cs" />
     <Compile Include="Models\MctMaterial.cs" />
+    <Compile Include="Models\MctMaterialDb.cs" />
+    <Compile Include="Models\MctMaterialSRC.cs" />
+    <Compile Include="Models\MctMaterialValue.cs" />
     <Compile Include="Models\MctNode.cs" />
+    <Compile Include="Models\MctPlanarElement.cs" />
+    <Compile Include="Models\MctRibLayoutSTL.cs" />
+    <Compile Include="Models\MctRibSTL.cs" />
     <Compile Include="Models\MctSection.cs" />
+    <Compile Include="Models\MctSectionDbUser.cs" />
     <Compile Include="Models\MctSectionSTL.cs" />
+    <Compile Include="Models\MctSectionSTLB.cs" />
+    <Compile Include="Models\MctSolidElement.cs" />
     <Compile Include="Models\MctStaticLoadCase.cs" />
+    <Compile Include="Models\MctRibTypeSTL.cs" />
     <Compile Include="Models\MctSupport.cs" />
     <Compile Include="Models\MctUnitSystem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

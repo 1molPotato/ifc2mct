@@ -27,30 +27,5 @@ namespace ifc2mct.MctFactory.Models
                 throw new InvalidOperationException("In-completed MctElement can't write to text");
             return string.Format($"{Id},{Type},{Mat.Id},{Sec.Id},{Node1.Id},{Node2.Id}");
         }
-    }
-    
-
-    public class MctFrameElement : MctElement
-    {
-        //public MctFrameElementTypeEnum Type { get; set; }
-        public double Angle { get; set; }
-        public int SubType { get; set; }
-        public string Exval { get; set; }
-        public override string ToString()
-        {
-            if (Type != MctElementTypeEnum.BEAM && Type != MctElementTypeEnum.TRUSS)
-                throw new ArgumentException("Incorrect element type");
-            return string.Format($"{base.ToString()},{Angle},{SubType}");
-        }
-    }
-
-    public class MctPlanarElement : MctElement
-    {
-        // not implemented
-    }
-
-    public class MctSolidElement : MctElement
-    {
-        // not implemented
-    }
+    }           
 }

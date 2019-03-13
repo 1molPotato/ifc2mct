@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 
 namespace ifc2mct.MctFactory.Models
 {
-    public abstract class MctSupport
+    public abstract class MctStaticLoad
     {
-        protected readonly List<MctNode> _nodes = new List<MctNode>();
-    }    
+        // empty
+    }            
 }
