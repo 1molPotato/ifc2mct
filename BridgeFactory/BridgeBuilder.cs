@@ -1388,7 +1388,7 @@ namespace ifc2mct.BridgeFactory
 
         public void Dispose()
         {
-            //throw new NotImplementedException();
+            _model.Dispose();            
         }
     }
 }

@@ -130,27 +130,29 @@ namespace ifc2mct.Tests
             {
                 (1, 1, 550), (2, 1, 1410), (2, 10, 3000), (3, 1, 3000), (4, 1, 1000), (3, 1, 1000), (2, 10, 3000), (2, 1, 1500), (2, 1, 1606), (1, 1, 1606)
             };
-            
+
             // build bridge components
-            var builder = new BridgeBuilder(INPATH, OUTPATH);
-            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
-            builder.SetGaps(STARTGAP, ENDGAP);
-            builder.SetOverallSection(secDimensions);
-            builder.SetThicknesses(thicknessLists);
-            foreach (var stiffenerType in stiffenerTypeTable)
-                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
-            foreach (var stiffenerLayout in stiffenerLayoutTable)
-                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
-            foreach (var (parentId, stiffList) in stiffenerLists)
-                builder.AddStiffeners(parentId, stiffList);
-            foreach (var bearingType in bearingTypeTable)
-                builder.AddBearingType(bearingType.Key, bearingType.Value);
-            foreach (var bearing in bearingList)
-                builder.AddBearing(bearing);
-            foreach (var diaphragmType in diaphragmTypeTable)
-                builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
-            builder.AddDiaphragm(diaphragmList);
-            builder.Build();
+            using (var builder = new BridgeBuilder(INPATH, OUTPATH))
+            {
+                builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+                builder.SetGaps(STARTGAP, ENDGAP);
+                builder.SetOverallSection(secDimensions);
+                builder.SetThicknesses(thicknessLists);
+                foreach (var stiffenerType in stiffenerTypeTable)
+                    builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+                foreach (var stiffenerLayout in stiffenerLayoutTable)
+                    builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+                foreach (var (parentId, stiffList) in stiffenerLists)
+                    builder.AddStiffeners(parentId, stiffList);
+                foreach (var bearingType in bearingTypeTable)
+                    builder.AddBearingType(bearingType.Key, bearingType.Value);
+                foreach (var bearing in bearingList)
+                    builder.AddBearing(bearing);
+                foreach (var diaphragmType in diaphragmTypeTable)
+                    builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
+                builder.AddDiaphragm(diaphragmList);
+                builder.Build();
+            }                
         }
 
         [TestMethod]
@@ -284,16 +286,18 @@ namespace ifc2mct.Tests
             };
 
             // build bridge components
-            var builder = new BridgeBuilder(INPATH, OUTPATH);
-            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
-            builder.SetGaps(STARTGAP, ENDGAP);
-            builder.SetOverallSection(secDimensions);
-            builder.SetThicknesses(thicknessLists);
-            foreach (var bearingType in bearingTypeTable)
-                builder.AddBearingType(bearingType.Key, bearingType.Value);
-            foreach (var bearing in bearingList)
-                builder.AddBearing(bearing);
-            builder.Build();
+            using (var builder = new BridgeBuilder(INPATH, OUTPATH))
+            {
+                builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+                builder.SetGaps(STARTGAP, ENDGAP);
+                builder.SetOverallSection(secDimensions);
+                builder.SetThicknesses(thicknessLists);
+                foreach (var bearingType in bearingTypeTable)
+                    builder.AddBearingType(bearingType.Key, bearingType.Value);
+                foreach (var bearing in bearingList)
+                    builder.AddBearing(bearing);
+                builder.Build();
+            }                
         }
 
         [TestMethod]
@@ -325,16 +329,18 @@ namespace ifc2mct.Tests
             };
 
             // build bridge components
-            var builder = new BridgeBuilder(INPATH, OUTPATH);
-            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
-            builder.SetGaps(STARTGAP, ENDGAP);
-            builder.SetOverallSection(secDimensions);
-            builder.SetThicknesses(thicknessLists);
-            foreach (var bearingType in bearingTypeTable)
-                builder.AddBearingType(bearingType.Key, bearingType.Value);
-            foreach (var bearing in bearingList)
-                builder.AddBearing(bearing);
-            builder.Build();
+            using (var builder = new BridgeBuilder(INPATH, OUTPATH))
+            {
+                builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+                builder.SetGaps(STARTGAP, ENDGAP);
+                builder.SetOverallSection(secDimensions);
+                builder.SetThicknesses(thicknessLists);
+                foreach (var bearingType in bearingTypeTable)
+                    builder.AddBearingType(bearingType.Key, bearingType.Value);
+                foreach (var bearing in bearingList)
+                    builder.AddBearing(bearing);
+                builder.Build();
+            }                
         }
 
         [TestMethod]
@@ -368,21 +374,22 @@ namespace ifc2mct.Tests
             };
 
             // build bridge components
-            var builder = new BridgeBuilder(INPATH, OUTPATH);
-            //builder.SetAlignment(true);
-            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
-            builder.SetGaps(STARTGAP, ENDGAP);
-            builder.SetOverallSection(secDimensions);
-            builder.SetThicknesses(thicknessLists);
+            using (var builder = new BridgeBuilder(INPATH, OUTPATH))
+            {
+                builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+                builder.SetGaps(STARTGAP, ENDGAP);
+                builder.SetOverallSection(secDimensions);
+                builder.SetThicknesses(thicknessLists);
 
-            foreach (var stiffenerType in stiffenerTypeTable)
-                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
-            foreach (var stiffenerLayout in stiffenerLayoutTable)
-                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
-            foreach (var (parentId, stiffList) in stiffenerLists)
-                builder.AddStiffeners(parentId, stiffList);
+                foreach (var stiffenerType in stiffenerTypeTable)
+                    builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+                foreach (var stiffenerLayout in stiffenerLayoutTable)
+                    builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+                foreach (var (parentId, stiffList) in stiffenerLists)
+                    builder.AddStiffeners(parentId, stiffList);
 
-            builder.Build();
+                builder.Build();
+            }                                
         }
 
         [TestMethod]
@@ -438,24 +445,25 @@ namespace ifc2mct.Tests
             };
 
             // build bridge components
-            var builder = new BridgeBuilder(INPATH, OUTPATH);
-            //builder.SetAlignment(true);
-            builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
-            builder.SetGaps(STARTGAP, ENDGAP);
-            builder.SetOverallSection(secDimensions);
-            builder.SetThicknesses(thicknessLists);
+            using (var builder = new BridgeBuilder(INPATH, OUTPATH))
+            {
+                builder.SetBridgeAlignment(START, END, VEROFFSET, LATOFFSET);
+                builder.SetGaps(STARTGAP, ENDGAP);
+                builder.SetOverallSection(secDimensions);
+                builder.SetThicknesses(thicknessLists);
 
-            foreach (var stiffenerType in stiffenerTypeTable)
-                builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
-            foreach (var stiffenerLayout in stiffenerLayoutTable)
-                builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
-            foreach (var (parentId, stiffList) in stiffenerLists)
-                builder.AddStiffeners(parentId, stiffList);
-            
-            foreach (var diaphragmType in diaphragmTypeTable)
-                builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
-            builder.AddDiaphragm(diaphragmList);
-            builder.Build();
+                foreach (var stiffenerType in stiffenerTypeTable)
+                    builder.AddStiffenerType(stiffenerType.Key, stiffenerType.Value);
+                foreach (var stiffenerLayout in stiffenerLayoutTable)
+                    builder.AddStiffenerLayout(stiffenerLayout.Key, stiffenerLayout.Value);
+                foreach (var (parentId, stiffList) in stiffenerLists)
+                    builder.AddStiffeners(parentId, stiffList);
+
+                foreach (var diaphragmType in diaphragmTypeTable)
+                    builder.AddDiaphragmType(diaphragmType.Key, diaphragmType.Value);
+                builder.AddDiaphragm(diaphragmList);
+                builder.Build();
+            }                                
         }
 
     }
