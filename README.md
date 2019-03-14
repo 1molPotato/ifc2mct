@@ -2,7 +2,7 @@
 
 ## Overview
 
-The project **ifc2mct** is part of my Master's thesis, where an IFC4x1-based method to describe alignment-based steel plate-girder (box-grder) bridge and its mapping to MCT (midas command text) are both presented. To follow the dissertation, this project is also divided into two parts, one is to provide interfaces to produce the bridge's data in the form of .ifc, the other is to translate the built data to mct file which can be imported to **Midas Civil**.
+The project **ifc2mct** is part of my Master's thesis, where an IFC4x1-based method is proposed to describe alignment-based steel plate-girder (box-girder) bridge and map them to a data model that represents entities for **FEA**. To follow the dissertation, this project is divided into two parts, one is to provide interfaces that generate the bridge's data in the form of .ifc, the other is to implement MCT (MIDAS/Civil Text) data model and translate the built data to mct files which can be imported to **MIDAS/Civil**.
 
 ## Introduction
 
