@@ -74,10 +74,16 @@ Since **IFC Data Model** and **MCT Data Model** cannot be comprehensively mapped
 <img src="./Images/mapping-model.png" width="100%" alt="mapping-model"/>
 </div>
 
-To implement the mapping method presented above, some class libraries and programs were coded. The diagram below shows the basic architecture of **ifc2mct**:
+To implement the mapping method presented above, some class libraries and programs are developed. The diagram below shows the basic architecture of **ifc2mct**:
 
 <div align=center>
 <img src="./Images/ifc2mct-translator-architecture.png" width="90%" alt="translator-architecture"/>
+</div>
+
+A test case that transforms the data of a specific steel girder bridge from IFC file to MCT file is excuted and the comparison of the models in 2 environments is shown below:
+
+<div align=center>
+<img src="./Images/comparison.png" width="90%" alt="comparison"/>
 </div>
 
 To be continued..
