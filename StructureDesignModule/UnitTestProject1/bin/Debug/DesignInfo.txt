@@ -1,0 +1,44 @@
+Design Information is belowing:
+----------------------------------------
+The Span Of Bridge is :30m
+The Width Of Lanes is :3.75m
+The Num Of the lane are :4
+The Width Of LeftShouder is :2.5m
+The Width Of RightShouder is :2.5m
+The Width Of widthOfmedialIsland 2m
+The Vehicle Load is :lord_i
+The Width Of Bridge is :38m
+----------------------------------------
+CrossSection information is belowing:
+----------------------------------------
+the girder_nums is :14
+the width_flange is :1.45
+the girder_gap is :2.7
+the girder_web_height is :1.9
+the girder_web_thickness is :0.01
+the girder_upper_flange_width is :0.4
+he girder_upper_flange_thickness is :0.025
+the girder_lower_flange_width is :0.55
+the girder_lower_flange_thickness is :0.03
+the bridge structure offset info is belowing:
+girder1:-17.55 230
+girder2:-14.85 230
+girder3:-12.15 230
+girder4:-9.45 230
+girder5:-6.75 230
+girder6:-4.05 230
+girder7:-1.35 230
+girder8:1.35 230
+girder9:4.05 230
+girder10:6.75 230
+girder11:9.45 230
+girder12:12.15 230
+girder13:14.85 230
+girder14:17.55 230
+----------------------------------------
+----------------------------------------
+The longitudinal design info is belowing:
+the axis moment inertial is :0.00730153333333335
+Z=17.7796214950164>10
+横梁格子刚度满足要求，横向传力均匀
+----------------------------------------

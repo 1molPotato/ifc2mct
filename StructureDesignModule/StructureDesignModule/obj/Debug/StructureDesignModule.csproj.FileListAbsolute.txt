@@ -1,0 +1,5 @@
+E:\Thsis_solution20190713\StructureDesignModule\StructureDesignModule\bin\Debug\StructureDesignModule.dll
+E:\Thsis_solution20190713\StructureDesignModule\StructureDesignModule\bin\Debug\StructureDesignModule.pdb
+E:\Thsis_solution20190713\StructureDesignModule\StructureDesignModule\obj\Debug\StructureDesignModule.csproj.CoreCompileInputs.cache
+E:\Thsis_solution20190713\StructureDesignModule\StructureDesignModule\obj\Debug\StructureDesignModule.dll
+E:\Thsis_solution20190713\StructureDesignModule\StructureDesignModule\obj\Debug\StructureDesignModule.pdb
