@@ -123,7 +123,7 @@ namespace XBIM_Module
                 si.Styles.Add(m.Instances.New<IfcSurfaceStyle>(ss =>
                 {
                     ss.Side = IfcSurfaceSide.POSITIVE;
-                    ss.Styles.Add(m.Instances.New<IfcSurfaceStyleShading>(ssha =>
+                    ss.Styles.Add(m.Instances.New<IfcSurfaceStyleRendering>(ssha =>
                     {
                         ssha.SurfaceColour = m.Instances.New<IfcColourRgb>(c =>
                         {
@@ -149,5 +149,44 @@ namespace XBIM_Module
                 sr.Items.Add(item);
             });
         }
+
+        //2019/8/4
+        public static IfcCartesianPoint MakeCartesianPoint(IfcStore m,double x=0,double y=0,double z=0)
+        {
+            return m.Instances.New<IfcCartesianPoint>(p => p.SetXYZ(x, y, z));
+        }
+
+        public static IfcPolyline MakePolyLine(IfcStore m,IfcCartesianPoint start,IfcCartesianPoint end)
+        {
+            return MakePolyLine(m, new List<IfcCartesianPoint>() { start, end });
+        }
+
+        public static IfcPolyline MakePolyLine(IfcStore m,List<IfcCartesianPoint> points)
+        {
+            return m.Instances.New<IfcPolyline>(pl =>
+            {
+                foreach (var point in points)
+                {
+                    pl.Points.Add(point);
+                }
+            });
+        }
+
+        public static IfcCenterLineProfileDef MakeCenterLineProfile(IfcStore m,IfcBoundedCurve curve,double thickness)
+        {
+            return m.Instances.New<IfcCenterLineProfileDef>(c =>
+            {
+                c.Thickness = thickness;
+                c.Curve = curve;
+            });
+        }
+
+        public static IfcCenterLineProfileDef MakeCenterLineProfile(IfcStore m,IfcCartesianPoint start,IfcCartesianPoint end,
+            double thickness)
+        {
+            var line = MakePolyLine(m, start, end);
+            return MakeCenterLineProfile(m,line, thickness);
+        }
+
     }
 }

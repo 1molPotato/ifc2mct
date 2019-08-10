@@ -318,6 +318,25 @@ namespace StructureDesignModule
             sw.WriteLine(str.PadRight(40, '-'));
             sw.Close();
         }
+
+        //生成测试需要的plate list
+        public List<double> CreateSectionParams()
+        {
+            var SectionParams = new List<double>();
+            SectionParams.Add(girder_upper_flange_width*1000);
+            SectionParams.Add(girder_web_height * 1000);
+            SectionParams.Add(girder_lower_flange_width * 1000);
+            return SectionParams;
+        }
+
+        public List<double> GetThickness()
+        {
+            var SectionPlateLists = new List<double>();
+            SectionPlateLists.Add(girder_upper_flange_thickness * 1000);
+            SectionPlateLists.Add(girder_web_thickness * 1000);
+            SectionPlateLists.Add(girder_lower_flange_thickness*1000);
+            return SectionPlateLists;
+        }
     }
     public class longitudinal_lateral_connection
     {
@@ -424,5 +443,6 @@ namespace StructureDesignModule
             sw.WriteLine(str.PadRight(40, '-'));
             sw.Close();
         }
+
     }
 }

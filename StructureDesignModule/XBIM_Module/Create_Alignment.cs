@@ -304,10 +304,6 @@ namespace XBIM_Module
 
                     a.Representation = m.Instances.New<IfcProductDefinitionShape>(pd => pd.Representations.Add(shaperepresentation));
 
-
-
-
-
                     /*IfcProductRepresentation PR = null;
                     IfcShapeRepresentation rep = null;
                     IfcSectionedSolidHorizontal ssh = null;
